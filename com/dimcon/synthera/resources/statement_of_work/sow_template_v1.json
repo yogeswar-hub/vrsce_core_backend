@@ -1,0 +1,182 @@
+{
+  "documentMetadata": {
+    "templateName": "Statement of Work",
+    "version": "1.0",
+    "createdBy": "User",
+    "createdDate": "2025-05-12"
+  },
+  "sections": [
+    {
+      "sectionOrder": 1,
+      "sectionTitle": "Summary & overview",
+      "contentType": "paragraph",
+      "questions": [
+        {
+          "questionId": "Q1",
+          "questionText": "What is the purpose of this document?",
+          
+          "sortOrder": 1
+        },
+        {
+          "questionId": "Q2",
+          "questionText": "Who are the stakeholders involved?",
+          "sortOrder": 2
+        },
+        {
+          "questionId": "Q3",
+          "questionText": "What is the overall objective or intended outcome from the meeting?",
+          "sortOrder": 3
+        }
+      ],
+      "subsections": []
+    },
+    {
+      "sectionOrder": 2,
+      "sectionTitle": "About Implementation Partner",
+      "contentType": "paragraph",
+      "questions": [
+        {
+          "questionId": "Q4",
+          "questionText": "Provide a brief overview/introduction of the implementation partner?",
+          "sortOrder": 1
+        },
+        {
+          "questionId": "Q5",
+          "questionText": "What is the implementation partner's expertise relevant to this project?",
+          "sortOrder": 2
+        },
+        {
+          "questionId": "Q6",
+          "questionText": "Mention any notable experience or similar past projects?",
+          "sortOrder": 3
+        }
+      ],
+      "subsections": []
+    },
+    {
+      "sectionOrder": 3,
+      "sectionTitle": "Project Scope - Our Understanding",
+      "contentType": "paragraph",
+      "questions": [
+        {
+          "questionId": "Q7",
+          "questionText": "What is the scope of the project and what are the key deliverables?",
+          "sortOrder": 1
+        },
+        {
+          "questionId": "Q8",
+          "questionText": "What are the main business processes and functional areas included in the NetSuite implementation scope?",
+          "sortOrder": 2
+        },
+        {
+          "questionId": "Q9",
+          "questionText": "Which NetSuite modules or features will be implemented as part of this project (e.g., Financials, CRM, Inventory)?",
+          "sortOrder": 3
+        },
+        {
+          "questionId": "Q10",
+          "questionText": "Are there specific departments, locations, or business units that this project will cover?",
+          "sortOrder": 4
+        },
+        {
+          "questionId": "Q11",
+          "questionText": "What key objectives or outcomes define the scope of this implementation (what will a successful project include)?",
+          "sortOrder": 5
+        },
+        {
+          "questionId": "Q12",
+          "questionText": "What are the key deliverables?",
+          "sortOrder": 6
+        }
+      ],
+      "subsections": [
+        {
+          "subsectionOrder": "3.1",
+          "subsectionTitle": "Configuration Scope",
+          "contentType": "paragraph",
+          "questions": [
+            {
+              "questionId": "Q13",
+              "questionText": "Which NetSuite modules and features are included for configuration (e.g., General Ledger, Accounts Payable, Order Management, Inventory, CRM)?",
+              "sortOrder": 1
+            },
+            {
+              "questionId": "Q14",
+              "questionText": "What business process configurations will be done (e.g., approval workflows, custom fields/forms, roles)?",
+              "sortOrder": 2
+            },
+            {
+              "questionId": "Q15",
+              "questionText": "Will there be any custom development or SuiteScript coding required? If so, what functionalities will they handle?",
+              "sortOrder": 3
+            },
+            {
+              "questionId": "Q16",
+              "questionText": "Are there any third-party bundles in the scope (e.g., SuiteApps or connectors)?",
+              "sortOrder": 4
+            }
+          ]
+        },
+        {
+          "subsectionOrder": "3.2",
+          "subsectionTitle": "Environmental Planning",
+          "contentType": "paragraph",
+          "questions": [
+            {
+              "questionId": "Q17",
+              "questionText": "What NetSuite environments will be utilized (e.g., production, sandbox)?",
+              "sortOrder": 1
+            },
+            {
+              "questionId": "Q18",
+              "questionText": "Is a dedicated testing/staging environment planned before go-live?",
+              "sortOrder": 2
+            },
+            {
+              "questionId": "Q19",
+              "questionText": "How will configuration/customization be migrated across environments?",
+              "sortOrder": 3
+            },
+            {
+              "questionId": "Q20",
+              "questionText": "Are there any constraints like sandbox refresh or downtime for go-live?",
+              "sortOrder": 4
+            }
+          ]
+        },
+        {
+          "subsectionOrder": "3.3",
+          "subsectionTitle": "Data Migration Scope",
+          "contentType": "paragraph",
+          "questions": [
+            {
+              "questionId": "Q21",
+              "questionText": "What legacy systems or sources are in scope for data migration?",
+              "sortOrder": 1
+            },
+            {
+              "questionId": "Q22",
+              "questionText": "Which data elements will be migrated (e.g., master data, open transactions)?",
+              "sortOrder": 2
+            },
+            {
+              "questionId": "Q23",
+              "questionText": "How much historical data will be migrated?",
+              "sortOrder": 3
+            },
+            {
+              "questionId": "Q24",
+              "questionText": "Who is responsible for data cleansing and mapping?",
+              "sortOrder": 4
+            },
+            {
+              "questionId": "Q25",
+              "questionText": "Are there any formatting/data quality issues to address before migration?",
+              "sortOrder": 5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
