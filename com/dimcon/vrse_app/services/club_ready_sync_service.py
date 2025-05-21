@@ -1,13 +1,13 @@
 # clubready_sync_service.py
 
 from datetime import datetime, UTC
-from com.dimcon.synthera.utilities.sessions_manager import DBSessionUtil
-from com.dimcon.synthera.resources.connect_aurora import get_engine
-from com.dimcon.synthera.resources.vrse.vrse_platform_config import PlatformConfig
-from com.dimcon.synthera.resources.vrse.vrse_club_locations import ClubLocation
-from com.dimcon.synthera.resources.vrse.vrse_club_users import ClubUser
-from com.dimcon.synthera.services.club_ready_api_client import ClubReadyAPIClient
-from com.dimcon.synthera.utilities.log_handler import LoggerManager
+from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
+from com.dimcon.vrse_app.resources.connect_aurora import get_engine
+from com.dimcon.vrse_app.resources.vrse.vrse_platform_config import PlatformConfig
+from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
+from com.dimcon.vrse_app.resources.vrse.vrse_club_users import ClubUser
+from com.dimcon.vrse_app.services.club_ready_api_client import ClubReadyAPIClient
+from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 
 logger = LoggerManager.setup_logger(__name__)
 

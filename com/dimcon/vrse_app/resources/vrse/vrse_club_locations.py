@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 from sqlalchemy import Column, Integer, String, TIMESTAMP
-from com.dimcon.synthera.resources.base import Base
-from com.dimcon.synthera.utilities.log_handler import LoggerManager
+from com.dimcon.vrse_app.resources.base import Base
+from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 
 # Setup centralized logger
 logger = LoggerManager.setup_logger(__name__)
@@ -123,8 +123,8 @@ class ClubLocation(Base):
             session.rollback()
             raise
 if __name__ == "__main__":
-    from com.dimcon.synthera.resources.connect_aurora import get_engine
-    from com.dimcon.synthera.utilities.sessions_manager import DBSessionUtil
+    from com.dimcon.vrse_app.resources.connect_aurora import get_engine
+    from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
 
     engine = get_engine()
     db_util = DBSessionUtil(engine)

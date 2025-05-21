@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from sqlalchemy.orm import sessionmaker
-from com.dimcon.synthera.utilities.log_handler import LoggerManager
+from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 import logging  # still needed for log level constants
 
 logger = LoggerManager.setup_logger(__name__, level=logging.DEBUG)

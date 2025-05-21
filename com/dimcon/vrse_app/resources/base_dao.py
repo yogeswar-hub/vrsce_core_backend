@@ -1,4 +1,4 @@
-from com.dimcon.synthera.utilities.log_handler import LoggerManager
+from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 import logging
 from sqlalchemy import or_
 

@@ -1,6 +1,6 @@
 import json
 from sqlalchemy import create_engine
-from com.dimcon.synthera.utilities.secrets_manager import SecretsManagerHandler
+from com.dimcon.vrse_app.utilities.secrets_manager import SecretsManagerHandler
 
 def get_engine(config_file='com/dimcon/synthera/utilities/config.ini'):
     # Retrieve secret data using the centralized SecretsManagerHandler

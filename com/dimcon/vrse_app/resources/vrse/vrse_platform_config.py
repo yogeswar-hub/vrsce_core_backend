@@ -1,9 +1,9 @@
 from datetime import datetime, UTC
 from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP
-from com.dimcon.synthera.resources.base import Base
+from com.dimcon.vrse_app.resources.base import Base
 
 # Logger setup
-from com.dimcon.synthera.utilities.log_handler import LoggerManager
+from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 logger = LoggerManager.setup_logger(__name__)
 
 class PlatformConfig(Base):
@@ -131,8 +131,8 @@ class PlatformConfig(Base):
             raise
 
 if __name__ == "__main__":
-    from com.dimcon.synthera.utilities.sessions_manager import DBSessionUtil
-    from com.dimcon.synthera.resources.connect_aurora import get_engine
+    from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
+    from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 
     engine = get_engine()
     db_util = DBSessionUtil(engine)

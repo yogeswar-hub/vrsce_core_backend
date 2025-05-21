@@ -2,7 +2,7 @@
 
 import requests
 from typing import List
-from com.dimcon.synthera.utilities.log_handler import LoggerManager
+from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 
 logger = LoggerManager.setup_logger(__name__)
 

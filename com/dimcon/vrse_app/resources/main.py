@@ -1,4 +1,4 @@
-from com.dimcon.synthera.resources.base import Base  # Import the shared Base
+from com.dimcon.vrse_app.resources.base import Base  # Import the shared Base
 from connect_aurora import get_engine
 
 # Create database connection using your existing get_engine function
