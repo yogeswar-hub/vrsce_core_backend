@@ -1,7 +1,6 @@
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
 from com.dimcon.vrse_app.resources.vrse.vrse_platform_config import PlatformConfig
-from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
 from com.dimcon.vrse_app.resources.vrse.vrse_club_users import ClubUser
 from com.dimcon.vrse_app.services.club_ready_sync_service import ClubReadySyncService
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
@@ -14,7 +13,7 @@ def main():
     engine = get_engine()
     db_util = DBSessionUtil(engine)
     
-    # Verify enabled configuration exists
+    # Verify that enabled configuration exists.
     with db_util.session_scope() as session:
         configs = session.query(PlatformConfig).filter_by(platform_name="club_ready", enable_member_sync=True).all()
         if not configs:
@@ -40,20 +39,30 @@ def main():
     }
     logger.info(f"Audit details extracted from event: {audit}")
     
-    # Run the live sync service using audit details passed from the test script.
-    logger.info("Starting live ClubReady sync...")
+    # Run only the user sync function.
+    logger.info("Starting live ClubReady user sync only...")
     sync_service = ClubReadySyncService()
-    sync_service.run_sync(audit)
     
-    # Query and print records after sync.
+    # For each configuration, call only the sync_users() function.
     with db_util.session_scope() as session:
-        locations = session.query(ClubLocation).all()
+        for config in configs:
+            try:
+                # Re-attach config to the current session.
+                config = session.merge(config)
+                logger.info(f"Starting user sync for platform: {config.platform_name} (ChainId: {config.chain_id})")
+                sync_service.sync_users(config, session, audit)
+                # Update sync timestamps.
+                config.last_synced_at = datetime.now(timezone.utc)
+                config.updated_at = datetime.now(timezone.utc)
+                session.commit()
+                logger.info(f"User sync completed successfully for platform: {config.platform_name}")
+            except Exception as e:
+                session.rollback()
+                logger.error(f"User sync failed for platform '{config.platform_name}': {e}")
+    
+    # Query and print ClubUser records after sync.
+    with db_util.session_scope() as session:
         users = session.query(ClubUser).all()
-    
-        logger.info(f"Live Sync Results: {len(locations)} Club Location(s) stored in DB.")
-        for loc in locations:
-            print(loc.to_dict())
-    
         logger.info(f"Live Sync Results: {len(users)} Club User(s) stored in DB.")
         for user in users:
             print(user.to_dict())

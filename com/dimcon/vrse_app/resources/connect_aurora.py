@@ -2,7 +2,7 @@ import json
 from sqlalchemy import create_engine
 from com.dimcon.vrse_app.utilities.secrets_manager import SecretsManagerHandler
 
-def get_engine(config_file='com/dimcon/synthera/utilities/config.ini'):
+def get_engine(config_file='com/dimcon/vrse_app/utilities/config.ini'):
     # Retrieve secret data using the centralized SecretsManagerHandler
     secret_data = SecretsManagerHandler.get_secret(config_file=config_file, section="database")
     

@@ -43,18 +43,40 @@ class ClubReadyAPIClient:
 
     def fetch_all_users(self) -> List[dict]:
         """
-        Fetches all users for the given chain.
-
+        Fetches all users for the given chain by looping through paginated results.
         Returns:
             List[dict]: List of user/member records.
         """
         url = f"{self.BASE_URL}/users/find"
+        all_users = []
+        page = 2
+        per_page = 100  # adjust as needed; 100 is the assumed default page size
 
-        try:
-            response = requests.get(url, params=self.params)
-            response.raise_for_status()
-            logger.info(" Fetched users from ClubReady API")
-            return response.json().get("users", [])  # Handles nested 'users' key if present
-        except requests.RequestException as e:
-            logger.error(f" Failed to fetch users: {e}")
-            raise
+        while True:
+            params = self.params.copy()
+            params.update({
+                "page": page,
+                "limit": per_page
+            })
+
+            try:
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                data = response.json().get("users", [])
+                logger.info(f"Fetched {len(data)} users from page {page}")
+
+                if not data:
+                    break
+
+                all_users.extend(data)
+
+                # If the data returned is less than per_page, we reached the last page.
+                if len(data) < per_page:
+                    break
+
+                page += 1
+            except requests.RequestException as e:
+                logger.error(f"Failed to fetch page {page} of users: {e}")
+                raise
+
+        return all_users
