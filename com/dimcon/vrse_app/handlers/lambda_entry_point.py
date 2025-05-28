@@ -5,6 +5,7 @@ from com.dimcon.vrse_app.services.club_location_service import ClubLocationServi
 from com.dimcon.vrse_app.services.club_users_service import ClubUsersService
 from com.dimcon.vrse_app.services.audit_log_service import AuditLogService
 from com.dimcon.vrse_app.utilities.responses import ResponseBuilder
+from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -20,18 +21,19 @@ def lambda_handler(event, context):
     if not http_method:
         return ResponseBuilder.build_response(400, {"error": "Missing 'httpMethod' in event."})
     
-    # Extract path parameters (if any)
+    # Extract path and query parameters (if any)
     path_params = event.get("pathParameters") or {}
+    query_params = event.get("queryStringParameters") or {}
     
     # Extract Cognito claims from the event context; these become our audit details.
     cognito_claims = event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
     user_info = {
-        "user_id": cognito_claims.get("sub", "unknown"),
-        "email": cognito_claims.get("email", ""),
-        "iss": cognito_claims.get("iss", ""),
+        "user_id":   cognito_claims.get("sub", "unknown"),
+        "email":     cognito_claims.get("email", ""),
+        "iss":       cognito_claims.get("iss", ""),
         "auth_time": cognito_claims.get("auth_time", ""),
-        "aud": cognito_claims.get("aud", ""),
-        "username": cognito_claims.get("username", "")
+        "aud":       cognito_claims.get("aud", ""),
+        "username":  cognito_claims.get("username", "")
     }
     
     # Determine the primary resource (e.g., platform_config, club_locations, club_users)
@@ -51,11 +53,24 @@ def lambda_handler(event, context):
     
     elif http_method == "GET":
         if resource == "club_locations":
-            result = ClubLocationService.handle_get(event, user_info, path_params)
-            return ResponseBuilder.build_response(200, result)
+            # Use query string parameters for pagination.
+            svc    = ClubLocationService()
+            page   = int(query_params.get("page", 1))
+            limit  = int(query_params.get("limit", 100))
+            data   = svc.fetch_location_overview(page, limit)
+            return ResponseBuilder.build_response(200, data)
+      
         elif resource == "club_users":
-            result = ClubUsersService.handle_get(event, user_info, path_params)
-            return ResponseBuilder.build_response(200, result)
+            # e.g. GET /users?locationId=123&page=1&limit=20&search=foo
+            params      = query_params
+            loc_id      = int(params.get("locationId", 0))
+            page        = int(params.get("page", 1))
+            limit       = int(params.get("limit", 20))
+            search_term = params.get("search")
+            
+            svc = ClubUsersService(get_engine())
+            payload = svc.fetch_users_by_location(loc_id, search_term, page, limit)
+            return ResponseBuilder.build_response(200, payload)
         else:
             return ResponseBuilder.build_response(400, {"error": "Invalid resource for GET method."})
     
