@@ -9,7 +9,7 @@ logger = LoggerManager.setup_logger(__name__)
 class ClubLocation(Base):
     """
     Represents a ClubReady location (club) entry synced from the external API.
-    Stores metadata such as name, address, contact, and identifiers.
+    Stores metadata such as name, address, contact, identifiers, and additional Cognito attributes.
     """
     __tablename__ = 'club_locations'
 
@@ -43,6 +43,13 @@ class ClubLocation(Base):
     created_by = Column(String(256), nullable=False)
     updated_by = Column(String(256), nullable=False)
 
+    # Additional Cognito Attributes
+    sub = Column(String(256), nullable=True)
+    iss = Column(String(512), nullable=True)
+    auth_time = Column(String(256), nullable=True)  # Unix timestamp as string
+    aud = Column(String(256), nullable=True)
+    auth_time_human = Column(String(256), nullable=True)
+
     def to_dict(self):
         """
         Converts ORM object to dictionary format for serialization/logging.
@@ -56,15 +63,14 @@ class ClubLocation(Base):
         """
         from sqlalchemy import inspect
         inspector = inspect(engine)
-
         try:
             if cls.__tablename__ not in inspector.get_table_names():
                 cls.__table__.create(bind=engine)
-                logger.info(f" Table '{cls.__tablename__}' created.")
+                logger.info(f"Table '{cls.__tablename__}' created.")
             else:
-                logger.info(f" Table '{cls.__tablename__}' already exists. Skipping creation.")
+                logger.info(f"Table '{cls.__tablename__}' already exists. Skipping creation.")
         except Exception as e:
-            logger.error(f" Failed to create table '{cls.__tablename__}': {e}")
+            logger.error(f"Failed to create table '{cls.__tablename__}': {e}")
             raise
 
     @classmethod
@@ -92,7 +98,6 @@ class ClubLocation(Base):
         try:
             count = 0
             for club in club_data:
-                address = club.get("Address", {})
                 location = cls(
                     club_id=club["Id"],
                     name=club["Name"],
@@ -102,17 +107,23 @@ class ClubLocation(Base):
                     credit_balance=club.get("CreditBalance"),
                     time_offset=club.get("TimeOffset"),
                     chain_id=club.get("ChainId"),
-                    street=address.get("Street"),
-                    city=address.get("City"),
-                    state_prov=address.get("StateProv"),
-                    postal_code=address.get("PostalCode"),
+                    street=club.get("Address", {}).get("Street"),
+                    city=club.get("Address", {}).get("City"),
+                    state_prov=club.get("Address", {}).get("StateProv"),
+                    postal_code=club.get("Address", {}).get("PostalCode"),
                     phone=club.get("Phone"),
                     email=club.get("Email"),
                     location_name=club.get("LocationName"),
                     updated_at=datetime.now(UTC),
                     created_at=datetime.now(UTC),
                     created_by=audit.get("created_by", "unknown"),
-                    updated_by=audit.get("updated_by", "unknown")
+                    updated_by=audit.get("updated_by", "unknown"),
+                    # Optional: populate Cognito attributes if available in club data.
+                    sub=club.get("sub"),
+                    iss=club.get("iss"),
+                    auth_time=club.get("auth_time"),
+                    aud=club.get("aud"),
+                    auth_time_human=club.get("auth_time_human")
                 )
                 session.merge(location)  # merge = insert or update
                 count += 1
@@ -122,13 +133,12 @@ class ClubLocation(Base):
             logger.error(f"Failed to insert/update Club locations: {e}")
             session.rollback()
             raise
+
 if __name__ == "__main__":
     from com.dimcon.vrse_app.resources.connect_aurora import get_engine
     from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
 
     engine = get_engine()
     db_util = DBSessionUtil(engine)
-
-    # Create the table if not exists
     ClubLocation.create_table(engine)
 

@@ -10,7 +10,7 @@ logger = LoggerManager.setup_logger(__name__)
 class ClubUser(Base):
     """
     ORM model representing a user/member synced from ClubReady.
-    Stores profile and referral data and links to a primary club location.
+    Stores profile, referral, and Cognito attributes and links to a primary club location.
     """
     __tablename__ = 'club_users'
 
@@ -28,6 +28,7 @@ class ClubUser(Base):
 
     # Foreign Key: Club Location
     primary_store_id = Column(Integer, ForeignKey(f"{ClubLocation.__tablename__}.club_id"))
+
     # Audit timestamps and user info
     created_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -35,43 +36,49 @@ class ClubUser(Base):
     created_by = Column(String(256), nullable=False)
     updated_by = Column(String(256), nullable=False)
 
+    # Additional Cognito Attributes
+    sub = Column(String(256), nullable=True)
+    iss = Column(String(512), nullable=True)
+    auth_time = Column(String(256), nullable=True)  # Unix timestamp as string
+    aud = Column(String(256), nullable=True)
+    auth_time_human = Column(String(256), nullable=True)
+
     def to_dict(self):
         """
-        Converts ORM object to dictionary format for JSON serialization or logging.
+        Converts ORM object to dictionary format.
         """
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
 
     @classmethod
     def create_table(cls, engine):
-        """
-        Creates the `clubready_users` table if it doesn't already exist.
-        """
         from sqlalchemy import inspect
         inspector = inspect(engine)
-
         try:
             if cls.__tablename__ not in inspector.get_table_names():
                 cls.__table__.create(bind=engine)
-                logger.info(f" Table '{cls.__tablename__}' created successfully.")
+                logger.info(f"Table '{cls.__tablename__}' created successfully.")
             else:
-                logger.info(f" Table '{cls.__tablename__}' already exists. Skipping creation.")
+                logger.info(f"Table '{cls.__tablename__}' already exists. Skipping creation.")
         except Exception as e:
-            logger.error(f" Failed to create table '{cls.__tablename__}': {e}")
+            logger.error(f"Failed to create table '{cls.__tablename__}': {e}")
             raise
 
     @classmethod
     def insert_or_update_users(cls, session, users: list[dict], audit: dict):
         """
-        Inserts or updates ClubReady users in the DB.
-
-        Args:
-            session: SQLAlchemy session object
-            users: List of user dicts from ClubReady API response
-            audit: Dict with keys 'created_by' and 'updated_by' extracted from the event (Cognito claims)
+        Inserts or updates ClubReady users, including Cognito details, in the DB.
         """
         try:
             count = 0
             for user in users:
+                auth_time_human = None
+                if "auth_time" in user:
+                    try:
+                        unix_ts = int(user["auth_time"])
+                        auth_time_human = datetime.fromtimestamp(unix_ts, tz=timezone.utc).isoformat()
+                    except Exception as conv_err:
+                        logger.warning(f"Could not convert auth_time: {conv_err}")
+
                 record = cls(
                     user_id=user["UserId"],
                     email=user.get("Email"),
@@ -85,23 +92,25 @@ class ClubUser(Base):
                     updated_at=datetime.now(timezone.utc),
                     synced_at=datetime.now(timezone.utc),
                     created_by=audit.get("created_by"),
-                    updated_by=audit.get("updated_by")
+                    updated_by=audit.get("updated_by"),
+                    sub=user.get("sub"),
+                    iss=user.get("iss"),
+                    auth_time=user.get("auth_time"),
+                    aud=user.get("aud"),
+                    auth_time_human=auth_time_human
                 )
                 session.merge(record)  # safely upsert
                 count += 1
 
             session.commit()
-            logger.info(f" Synced {count} Club user(s) to DB.")
+            logger.info(f"Synced {count} Club user(s) to DB.")
         except Exception as e:
-            logger.error(f" Failed to insert/update Club users: {e}")
+            logger.error(f"Failed to insert/update Club users: {e}")
             session.rollback()
             raise
 
     @classmethod
     def drop_table(cls, engine):
-        """
-        Drops the `club_locations` table if it exists.
-        """
         try:
             cls.__table__.drop(bind=engine)
             logger.info(f"Table '{cls.__tablename__}' dropped successfully.")
@@ -115,8 +124,4 @@ if __name__ == "__main__":
 
     engine = get_engine()
     db_util = DBSessionUtil(engine)
-
-    # Create the table if not exists
     ClubUser.create_table(engine)
-
-    # Optional: insert test user list here by calling insert_or_update_users
