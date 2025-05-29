@@ -40,22 +40,24 @@ class ClubReadySyncService:
         ClubLocation.insert_or_update_locations(session, locations, audit)
         logger.info(f"Synced {len(locations)} locations for {config.platform_name}")
 
-    def sync_users(self, config, session, audit):
+    def sync_users(self, config, audit):
         """
-        Sync club users for a single configuration.
-
-        :param config: The PlatformConfig record.
-        :param session: Active SQLAlchemy session.
-        :param audit: Audit dictionary with keys 'created_by' and 'updated_by'.
+        Sync club users for a single configuration using bulk upsert.
         """
-        # Instantiate API client using config credentials.
+        # Instantiate the API client using config values.
         client = ClubReadyAPIClient(config.auth_key, config.chain_id)
-        # Fetch all users (handling pagination inside the API client).
-        users = client.fetch_all_users()
-        logger.info(f"Fetched {len(users)} users for platform: {config.platform_name}")
-        # Insert or update ClubUser records using provided audit details.
-        ClubUser.insert_or_update_users(session, users, audit)
-        logger.info(f"Synced {len(users)} users for {config.platform_name}")
+        
+        # Fetch all users from external API.
+        all_users = client.fetch_all_users()
+        logger.info(f"Fetched total {len(all_users)} users to sync.")
+        
+        batch_size = 5000
+        for i in range(0, len(all_users), batch_size):
+            chunk = all_users[i: i + batch_size]
+            with self.db_util.session_scope() as session:
+                ClubUser.bulk_upsert_users(session, chunk, audit)
+                session.commit()
+                logger.info(f"Bulk upserted {min(i+batch_size, len(all_users))} users.")
 
     def run_sync(self, audit=None):
         """
@@ -80,7 +82,7 @@ class ClubReadySyncService:
                         logger.info(f"Starting sync for platform: {config.platform_name} (ChainId: {config.chain_id})")
                         # Call separate functions to sync locations and users.
                         self.sync_locations(config, session, audit)
-                        self.sync_users(config, session, audit)
+                        self.sync_users(config, audit)
 
                         # Update sync timestamps in the configuration record.
                         config.last_synced_at = datetime.now(UTC)

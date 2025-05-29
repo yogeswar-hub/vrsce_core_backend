@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, ForeignKey, TIMESTAMP
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from com.dimcon.vrse_app.resources.base import Base
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
@@ -64,60 +65,54 @@ class ClubUser(Base):
             raise
 
     @classmethod
-    def insert_or_update_users(cls, session, users: list[dict], audit: dict):
+    def bulk_upsert_users(cls, session, users: list[dict], audit: dict):
         """
-        Inserts or updates ClubReady users, including Cognito details, in the DB.
+        Bulk upsert a list of user dictionaries in a single statement.
         """
-        try:
-            count = 0
-            for user in users:
-                auth_time_human = None
-                if "auth_time" in user:
-                    try:
-                        unix_ts = int(user["auth_time"])
-                        auth_time_human = datetime.fromtimestamp(unix_ts, tz=timezone.utc).isoformat()
-                    except Exception as conv_err:
-                        logger.warning(f"Could not convert auth_time: {conv_err}")
+        # Prepare a list of dictionaries with necessary fields.
+        # Adjust the keys as per your API data and model definitions.
+        values = []
+        for user in users:
+            # Optionally convert auth_time to auth_time_human
+            auth_time_human = None
+            if "auth_time" in user:
+                try:
+                    unix_ts = int(user["auth_time"])
+                    auth_time_human = datetime.fromtimestamp(unix_ts, tz=timezone.utc).isoformat()
+                except Exception as conv_err:
+                    logger.warning(f"Could not convert auth_time: {conv_err}")
+            values.append({
+                "user_id": user.get("UserId"),
+                "email": user.get("Email"),
+                "first_name": user.get("FirstName"),
+                "last_name": user.get("LastName"),
+                "barcode": user.get("Barcode"),
+                "username": user.get("Username"),
+                "referral_type_id": user.get("ReferralTypeId"),
+                "primary_store_id": user.get("PrimaryStoreId"),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "synced_at": datetime.now(timezone.utc),
+                "created_by": audit.get("created_by"),
+                "updated_by": audit.get("updated_by"),
+                "sub": user.get("sub"),
+                "iss": user.get("iss"),
+                "auth_time": user.get("auth_time"),
+                "aud": user.get("aud"),
+                "auth_time_human": auth_time_human,
+            })
 
-                record = cls(
-                    user_id=user["UserId"],
-                    email=user.get("Email"),
-                    first_name=user.get("FirstName"),
-                    last_name=user.get("LastName"),
-                    barcode=user.get("Barcode"),
-                    username=user.get("Username"),
-                    referral_type_id=user.get("ReferralTypeId"),
-                    primary_store_id=user.get("PrimaryStoreId"),
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
-                    synced_at=datetime.now(timezone.utc),
-                    created_by=audit.get("created_by"),
-                    updated_by=audit.get("updated_by"),
-                    sub=user.get("sub"),
-                    iss=user.get("iss"),
-                    auth_time=user.get("auth_time"),
-                    aud=user.get("aud"),
-                    auth_time_human=auth_time_human
-                )
-                session.merge(record)  # safely upsert
-                count += 1
+        stmt = pg_insert(cls).values(values)
+        # Exclude primary key and user_id (or whatever unique fields you use) from update.
+        update_cols = {c.name: c for c in stmt.excluded if c.name not in ("user_id",)}
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id"],  # Unique identifier.
+            set_=update_cols
+        )
+        session.execute(stmt)
+        logger.info(f"Bulk upserted {len(values)} Club user(s)")
 
-            session.commit()
-            logger.info(f"Synced {count} Club user(s) to DB.")
-        except Exception as e:
-            logger.error(f"Failed to insert/update Club users: {e}")
-            session.rollback()
-            raise
-
-    @classmethod
-    def drop_table(cls, engine):
-        try:
-            cls.__table__.drop(bind=engine)
-            logger.info(f"Table '{cls.__tablename__}' dropped successfully.")
-        except Exception as e:
-            logger.error(f"Failed to drop table '{cls.__tablename__}': {e}")
-            raise
-
+# Example usage outside the model (for instance, in a service)
 if __name__ == "__main__":
     from com.dimcon.vrse_app.resources.connect_aurora import get_engine
     from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
@@ -125,3 +120,15 @@ if __name__ == "__main__":
     engine = get_engine()
     db_util = DBSessionUtil(engine)
     ClubUser.create_table(engine)
+
+    # Example: a batch of users fetched from an external source.
+    all_users = [
+        {"UserId": 101, "Email": "user1@example.com", "FirstName": "John", "LastName": "Doe", "Barcode": "ABC123",
+         "Username": "johndoe", "ReferralTypeId": 1, "PrimaryStoreId": 1001, "auth_time": "1680000000", "sub": "sub1", "iss": "issuer1", "aud": "aud1"},
+        # ... more user dictionaries ...
+    ]
+    audit = {"created_by": "system", "updated_by": "system"}
+    
+    with db_util.session_scope() as session:
+        ClubUser.bulk_upsert_users(session, all_users, audit)
+        session.commit()

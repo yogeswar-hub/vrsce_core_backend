@@ -1,78 +1,110 @@
 import logging
 import json
+
 from com.dimcon.vrse_app.services.platform_config_service_post import PlatformConfigService
-from com.dimcon.vrse_app.services.club_location_service import ClubLocationService
-from com.dimcon.vrse_app.services.club_users_service import ClubUsersService
-from com.dimcon.vrse_app.services.audit_log_service import AuditLogService
-from com.dimcon.vrse_app.utilities.responses import ResponseBuilder
-from com.dimcon.vrse_app.resources.connect_aurora import get_engine
+from com.dimcon.vrse_app.services.club_location_service     import ClubLocationService
+from com.dimcon.vrse_app.services.club_users_service        import ClubUsersService
+from com.dimcon.vrse_app.services.audit_log_service         import AuditLogService
+from com.dimcon.vrse_app.utilities.responses                import ResponseBuilder
+from com.dimcon.vrse_app.resources.connect_aurora           import get_engine
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
-    logger.info(f"Lambda event: {json.dumps(event)}")
+    # 1) Quick debug: log what keys we actually got
+    logger.info("RAW EVENT KEYS: %s", list(event.keys()))
     
-    # Extract and normalize HTTP method and resource path.
-    http_method = event.get("httpMethod", "").upper()
-    resource_path = event.get("resource", "").lower()
-    if not resource_path:
-        return ResponseBuilder.build_response(400, {"error": "Missing 'resource' in event."})
+    # 2) Determine HTTP method
+    http_method = (
+        event.get("requestContext", {})
+             .get("http", {})
+             .get("method", "")
+        if event.get("version", "").startswith("2.0")
+        else event.get("httpMethod", "")
+    ).upper()
+    
+    # 3) Determine raw path, preferring the REST proxy resource
+    if event.get("version", "").startswith("2.0"):
+        raw_path = event.get("rawPath", "")
+    else:
+        raw_path = event.get("resource") or event.get("path", "")
+    
+    raw_path = raw_path.lower()
+    logger.info("Normalized incoming: %s %s", http_method, raw_path)
+    
+    # 4) Fail fast if missing
     if not http_method:
         return ResponseBuilder.build_response(400, {"error": "Missing 'httpMethod' in event."})
+    if not raw_path:
+        return ResponseBuilder.build_response(400, {"error": "Missing request path."})
     
-    # Extract path and query parameters (if any)
-    path_params = event.get("pathParameters") or {}
+    # 5) Strip off stage name if present (e.g. '/dev/club_locations')
+    parts = raw_path.lstrip("/").split("/")
+    if parts and parts[0] == "dev":   # change "dev" to match your stage if different
+        parts.pop(0)
+    resource = parts[0] if parts else ""
+    
+    # 6) Grab path & query params
+    path_params  = event.get("pathParameters") or {}
     query_params = event.get("queryStringParameters") or {}
     
-    # Extract Cognito claims from the event context; these become our audit details.
-    cognito_claims = event.get("requestContext", {}).get("authorizer", {}).get("claims", {})
+    # 7) Extract Cognito claims for auditing
+    claims = event.get("requestContext", {}) \
+                  .get("authorizer", {})   \
+                  .get("claims", {})        or {}
     user_info = {
-        "user_id":   cognito_claims.get("sub", "unknown"),
-        "email":     cognito_claims.get("email", ""),
-        "iss":       cognito_claims.get("iss", ""),
-        "auth_time": cognito_claims.get("auth_time", ""),
-        "aud":       cognito_claims.get("aud", ""),
-        "username":  cognito_claims.get("username", "")
+        "user_id":   claims.get("sub", "unknown"),
+        "email":     claims.get("email", ""),
+        "iss":       claims.get("iss", ""),
+        "auth_time": claims.get("auth_time", ""),
+        "aud":       claims.get("aud", ""),
+        "username":  claims.get("username", "")
     }
     
-    # Determine the primary resource (e.g., platform_config, club_locations, club_users)
-    resource = resource_path.strip("/").split("/")[0].lower()
-    
-    # Log every access to the AuditLog table.
+    # 8) Log access
     try:
         AuditLogService.log_access(user_info, resource, http_method)
     except Exception as err:
-        logger.error(f"Error logging audit record: {err}")
+        logger.error("Error logging audit record: %s", err)
     
-    # Routing based on HTTP method and resource.
+    # 9) Route!
+    # POST /platform_config
     if http_method == "POST" and resource == "platform_config":
-        # This call stores a new PlatformConfig record and triggers the sync via an SQLAlchemy event listener.
         result = PlatformConfigService.handle_post(event, user_info, path_params)
         return ResponseBuilder.build_response(200, result)
     
-    elif http_method == "GET":
+    # GET routes
+    if http_method == "GET":
         if resource == "club_locations":
-            # Use query string parameters for pagination.
-            svc    = ClubLocationService()
-            page   = int(query_params.get("page", 1))
-            limit  = int(query_params.get("limit", 100))
-            data   = svc.fetch_location_overview(page, limit)
+            svc   = ClubLocationService()
+            page  = int(query_params.get("page",  1))
+            limit = int(query_params.get("limit", 100))
+            data  = svc.fetch_location_overview(page, limit)
             return ResponseBuilder.build_response(200, data)
-      
-        elif resource == "club_users":
-            # e.g. GET /users?locationId=123&page=1&limit=20&search=foo
-            params      = query_params
-            loc_id      = int(params.get("locationId", 0))
-            page        = int(params.get("page", 1))
-            limit       = int(params.get("limit", 20))
-            search_term = params.get("search")
+        
+        if resource == "club_users":
+            # require a locationId query parameter
+            loc_id_str = query_params.get("locationId") or query_params.get("locationid")
+            if not loc_id_str:
+                return ResponseBuilder.build_response(400, {
+                    "error": "Missing 'locationId' query parameter."
+                })
+            loc_id      = int(loc_id_str)
+            page        = int(query_params.get("page",  1))
+            limit       = int(query_params.get("limit", 20))
+            search_term = query_params.get("search")
             
-            svc = ClubUsersService(get_engine())
+            svc     = ClubUsersService(get_engine())
             payload = svc.fetch_users_by_location(loc_id, search_term, page, limit)
             return ResponseBuilder.build_response(200, payload)
-        else:
-            return ResponseBuilder.build_response(400, {"error": "Invalid resource for GET method."})
+        
+        # unknown GET resource
+        return ResponseBuilder.build_response(400, {
+            "error": "Invalid resource for GET method."
+        })
     
-    else:
-        return ResponseBuilder.build_response(400, {"error": "Unsupported httpMethod or resource combination."})
+    # fallback for anything else
+    return ResponseBuilder.build_response(400, {
+        "error": "Unsupported httpMethod or resource combination."
+    })

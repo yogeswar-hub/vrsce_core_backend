@@ -50,7 +50,7 @@ class ClubReadyAPIClient:
         url = f"{self.BASE_URL}/users/find"
         all_users = []
         page = 1  # start from page 1
-        per_page = 100  # adjust as needed; 100 is the assumed default page size
+        per_page = 100   # adjust as needed; 100 is the assumed default page size
 
         while True:
             params = self.params.copy()

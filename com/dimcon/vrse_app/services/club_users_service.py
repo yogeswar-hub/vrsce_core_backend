@@ -57,8 +57,12 @@ class ClubUsersService(BaseDAO):
         }
         """
         with self.db_util.session_scope() as session:
-            # 1) Load the ClubLocation so we can return its name.
-            loc = session.get(ClubLocation, location_id)
+            # 1) Lookup by the club_id column instead of the surrogate PK.
+            loc = (
+                session.query(ClubLocation)
+                .filter(ClubLocation.club_id == location_id)
+                .one_or_none()
+            )
             if not loc:
                 raise ValueError(f"Location {location_id} not found")
             
