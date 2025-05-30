@@ -68,7 +68,7 @@ class ClubLocationService(BaseDAO):
             )
             counts_map = {loc_id: cnt for loc_id, cnt in user_counts}
 
-            # 3) Fetch locations (paginated if you like)
+            # 3) Fetch locations (paginated)
             loc_query = session.query(ClubLocation).order_by(ClubLocation.name.asc())
             total = loc_query.count()
             locs = loc_query.limit(limit).offset((page - 1) * limit).all()
