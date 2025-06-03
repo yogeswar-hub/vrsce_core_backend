@@ -47,15 +47,19 @@ class ClubLocationService(BaseDAO):
             "id":           <club_id>,
             "name":         <location.name>,
             "users":        <count of users at this club_id>,
-            "active_passes": 0,               # placeholder
+            "active_passes": 0,       # placeholder
             "integration":  <platform_name>
           }
         """
+        logger.info("Starting fetch_location_overview: page %s, limit %s", page, limit)
         with self.db_util.session_scope() as session:
-            # 1) Load integration name (assuming just one row, or pick the one matching your chain_id)
+            logger.debug("Fetching integration config")
+            # 1) Load integration name (assuming just one row)
             cfg = session.query(PlatformConfig).first()
             integration_name = cfg.platform_name if cfg else None
+            logger.info("Integration config fetched: integration_name set")
 
+            logger.debug("Counting users per location")
             # 2) Count users per location
             user_counts = (
                 session
@@ -67,12 +71,16 @@ class ClubLocationService(BaseDAO):
                 .all()
             )
             counts_map = {loc_id: cnt for loc_id, cnt in user_counts}
+            logger.info("User counts aggregated for locations")
 
+            logger.debug("Querying paginated locations")
             # 3) Fetch locations (paginated)
             loc_query = session.query(ClubLocation).order_by(ClubLocation.name.asc())
             total = loc_query.count()
             locs = loc_query.limit(limit).offset((page - 1) * limit).all()
+            logger.info("Fetched %s locations out of total %s", len(locs), total)
 
+            logger.debug("Building response object")
             # 4) Build the response
             results = []
             for loc in locs:
@@ -83,5 +91,6 @@ class ClubLocationService(BaseDAO):
                     "active_passes": 0,
                     "integration":   integration_name
                 })
+            logger.info("Response built successfully with descriptive logs")
 
             return {"results": results, "total_count": total}

@@ -134,6 +134,44 @@ class ClubLocation(Base):
             session.rollback()
             raise
 
+    @classmethod
+    def insert_new_locations(cls, session, club_data: list[dict], audit: dict):
+        """
+        Inserts only new club location records (skips records where club_id already exists).
+        """
+        count = 0
+        for club in club_data:
+            new_location = cls(
+                club_id=club["Id"],
+                name=club["Name"],
+                district_id=club.get("DistrictId"),
+                division_id=club.get("DivisionId"),
+                club_type=club.get("ClubType"),
+                credit_balance=club.get("CreditBalance"),
+                time_offset=club.get("TimeOffset"),
+                chain_id=club.get("ChainId"),
+                street=club.get("Address", {}).get("Street"),
+                city=club.get("Address", {}).get("City"),
+                state_prov=club.get("Address", {}).get("StateProv"),
+                postal_code=club.get("Address", {}).get("PostalCode"),
+                phone=club.get("Phone"),
+                email=club.get("Email"),
+                location_name=club.get("LocationName"),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                created_by=audit.get("created_by", "unknown"),
+                updated_by=audit.get("updated_by", "unknown"),
+                sub=club.get("sub"),
+                iss=club.get("iss"),
+                auth_time=club.get("auth_time"),
+                aud=club.get("aud"),
+                auth_time_human=club.get("auth_time_human")
+            )
+            session.add(new_location)
+            count += 1
+        session.commit()
+        logger.info(f"Inserted {count} new Club location(s) to DB.")
+
 if __name__ == "__main__":
     from com.dimcon.vrse_app.resources.connect_aurora import get_engine
     from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil

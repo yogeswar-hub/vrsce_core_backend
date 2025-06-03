@@ -14,73 +14,77 @@ logger = LoggerManager.setup_logger(__name__)
 
 class ClubReadySyncService:
     """
-    Handles syncing of ClubReady data (locations and users) for each enabled platform configuration.
-    Expects audit information to be provided from the caller (e.g. from a Lambda event).
+    Syncs ClubReady data (locations and users) for each enabled platform.
+    Only records not already in the database will be inserted.
     """
 
     def __init__(self):
-        # Initialize DB engine and session utility.
         self.engine = get_engine()
         self.db_util = DBSessionUtil(self.engine)
 
     def sync_locations(self, config, session, audit):
         """
-        Sync club locations for a single configuration.
-
-        :param config: The PlatformConfig record.
-        :param session: Active SQLAlchemy session.
-        :param audit: Audit dictionary with keys 'created_by' and 'updated_by'.
+        Sync club locations for a single configuration – only insert new locations.
         """
-        # Instantiate API client using config credentials.
         client = ClubReadyAPIClient(config.auth_key, config.chain_id)
-        # Fetch locations from the external API.
-        locations = client.fetch_club_locations()
-        logger.info(f"Fetched {len(locations)} locations for platform: {config.platform_name}")
-        # Insert or update ClubLocation records using provided audit details.
-        ClubLocation.insert_or_update_locations(session, locations, audit)
-        logger.info(f"Synced {len(locations)} locations for {config.platform_name}")
+        fetched_locations = client.fetch_club_locations()
+        logger.info(f"Fetched {len(fetched_locations)} locations for platform: {config.platform_name}")
+
+        # Get existing club IDs in the DB.
+        existing_ids = {loc for (loc,) in session.query(ClubLocation.club_id).all()}
+        new_locations = [loc for loc in fetched_locations if loc.get("Id") not in existing_ids]
+        logger.info(f"Found {len(new_locations)} new locations for platform: {config.platform_name}")
+
+        if new_locations:
+            ClubLocation.insert_new_locations(session, new_locations, audit)
+            logger.info(f"Inserted {len(new_locations)} new location(s) for {config.platform_name}")
+        else:
+            logger.info("No new locations to sync.")
 
     def sync_users(self, config, audit):
         """
-        Sync club users for a single configuration using bulk upsert.
+        Sync club users for a single configuration – only insert new users.
         """
-        # Instantiate the API client using config values.
         client = ClubReadyAPIClient(config.auth_key, config.chain_id)
-        
-        # Fetch all users from external API.
-        all_users = client.fetch_all_users()
-        logger.info(f"Fetched total {len(all_users)} users to sync.")
-        
-        batch_size = 5000
-        for i in range(0, len(all_users), batch_size):
-            chunk = all_users[i: i + batch_size]
-            with self.db_util.session_scope() as session:
-                ClubUser.bulk_upsert_users(session, chunk, audit)
-                session.commit()
-                logger.info(f"Bulk upserted {min(i+batch_size, len(all_users))} users.")
+        all_users = client.fetch_all_users_parallel_dynamic(limit=100, batch_size=1)
+        logger.info(f"Fetched a total of {len(all_users)} users from ClubReady API using dynamic parallel tasks.")
+
+        # Open a session to filter out new users.
+        with self.db_util.session_scope() as session:
+            existing_user_ids = {uid for (uid,) in session.query(ClubUser.user_id).all()}
+            new_users = [user for user in all_users if user.get("UserId") not in existing_user_ids]
+            logger.info(f"Found {len(new_users)} new users for platform: {config.platform_name}")
+            
+            if new_users:
+                ClubUser.bulk_insert_users(session, new_users, audit)
+                logger.info(f"Inserted {len(new_users)} new club user(s) for {config.platform_name}")
+            else:
+                logger.info("No new users to sync.")
 
     def run_sync(self, audit=None):
         """
-        Executes the sync job for all enabled ClubReady platform configurations.
-
-        :param audit: Dictionary with audit details (e.g. {"created_by": "cognito_user", "updated_by": "cognito_user"})
-                      If not provided, defaults to {"created_by": "club_ready_sync", "updated_by": "club_ready_sync"}.
+        Runs the sync job for all enabled ClubReady platform configurations.
+        Deduplicates configurations by auth_key to avoid multiple fetches.
         """
         if audit is None:
             audit = {"created_by": "club_ready_sync", "updated_by": "club_ready_sync"}
 
         try:
             with self.db_util.session_scope() as session:
-                # Fetch all enabled platform configurations.
                 configs = session.query(PlatformConfig).filter_by(enable_member_sync=True).all()
                 if not configs:
                     logger.warning("No enabled platform configurations found for ClubReady sync.")
                     return
 
+                unique_configs = {}
                 for config in configs:
+                    # Use the auth_key as the deduplication key; adjust if needed.
+                    if config.auth_key not in unique_configs:
+                        unique_configs[config.auth_key] = config
+
+                for config in unique_configs.values():
                     try:
                         logger.info(f"Starting sync for platform: {config.platform_name} (ChainId: {config.chain_id})")
-                        # Call separate functions to sync locations and users.
                         self.sync_locations(config, session, audit)
                         self.sync_users(config, audit)
 
@@ -88,19 +92,13 @@ class ClubReadySyncService:
                         config.last_synced_at = datetime.now(UTC)
                         config.updated_at = datetime.now(UTC)
                         session.commit()
-
                         logger.info(f"Sync completed successfully for platform: {config.platform_name}")
-
                     except Exception as e:
                         session.rollback()
                         logger.error(f"Sync failed for platform '{config.platform_name}': {e}")
-
         except Exception as global_error:
             logger.critical(f"Critical failure in ClubReady sync service: {global_error}", exc_info=True)
 
-
 if __name__ == "__main__":
-    # Example: passing audit details from the calling context (e.g., from a Lambda event)
     sync_service = ClubReadySyncService()
-    # Replace the dictionary below with actual audit values if available.
     sync_service.run_sync({"created_by": "actual_cognito_user", "updated_by": "actual_cognito_user"})

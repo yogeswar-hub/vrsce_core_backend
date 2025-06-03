@@ -112,6 +112,45 @@ class ClubUser(Base):
         session.execute(stmt)
         logger.info(f"Bulk upserted {len(values)} Club user(s)")
 
+    @classmethod
+    def bulk_insert_users(cls, session, users: list[dict], audit: dict):
+        """
+        Bulk inserts new club users. Existing users (based on unique user_id) are skipped.
+        """
+        values = []
+        for user in users:
+            auth_time_human = None
+            if "auth_time" in user:
+                try:
+                    unix_ts = int(user["auth_time"])
+                    auth_time_human = datetime.fromtimestamp(unix_ts, tz=timezone.utc).isoformat()
+                except Exception as conv_err:
+                    logger.warning(f"Could not convert auth_time: {conv_err}")
+            values.append({
+                "user_id": user.get("UserId"),
+                "email": user.get("Email"),
+                "first_name": user.get("FirstName"),
+                "last_name": user.get("LastName"),
+                "barcode": user.get("Barcode"),
+                "username": user.get("Username"),
+                "referral_type_id": user.get("ReferralTypeId"),
+                "primary_store_id": user.get("PrimaryStoreId"),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "synced_at": datetime.now(timezone.utc),
+                "created_by": audit.get("created_by"),
+                "updated_by": audit.get("updated_by"),
+                "sub": user.get("sub"),
+                "iss": user.get("iss"),
+                "auth_time": user.get("auth_time"),
+                "aud": user.get("aud"),
+                "auth_time_human": auth_time_human,
+            })
+        stmt = pg_insert(cls).values(values)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["user_id"])
+        session.execute(stmt)
+        logger.info(f"Bulk inserted {len(values)} new Club user(s).")
+
 # Example usage outside the model (for instance, in a service)
 if __name__ == "__main__":
     from com.dimcon.vrse_app.resources.connect_aurora import get_engine

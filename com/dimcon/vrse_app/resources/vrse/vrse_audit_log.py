@@ -11,8 +11,10 @@ class AuditLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(256), nullable=False)
     username = Column(String(256), nullable=True)
+    email = Column(String(256), nullable=True)  # New column for email
     resource = Column(String(256), nullable=False)
     method = Column(String(10), nullable=False)
+    action = Column(String(256), nullable=True)  # New column for action description
     accessed_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     def to_dict(self):
@@ -25,20 +27,20 @@ class AuditLog(Base):
         try:
             if cls.__tablename__ not in inspector.get_table_names():
                 cls.__table__.create(bind=engine)
-                logger.info(f"Table '{cls.__tablename__}' created successfully.")
+                logger.info("Table '%s' has been successfully created.", cls.__tablename__)
             else:
-                logger.info(f"Table '{cls.__tablename__}' already exists. Skipping creation.")
+                logger.info("Table '%s' already exists; creation skipped.", cls.__tablename__)
         except Exception as e:
-            logger.error(f"Failed to create table '{cls.__tablename__}': {e}")
+            logger.error("An error occurred while creating table '%s': %s", cls.__tablename__, e)
             raise
 
     @classmethod
     def drop_table(cls, engine):
         try:
             cls.__table__.drop(bind=engine)
-            logger.info(f"Table '{cls.__tablename__}' dropped successfully.")
+            logger.info("Table '%s' has been successfully dropped.", cls.__tablename__)
         except Exception as e:
-            logger.error(f"Failed to drop table '{cls.__tablename__}': {e}")
+            logger.error("An error occurred while dropping table '%s': %s", cls.__tablename__, e)
             raise
 
 if __name__ == "__main__":
