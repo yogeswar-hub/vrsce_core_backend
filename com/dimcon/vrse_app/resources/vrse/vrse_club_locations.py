@@ -86,52 +86,70 @@ class ClubLocation(Base):
             raise
 
     @classmethod
+    @classmethod
     def insert_or_update_locations(cls, session, club_data: list[dict], audit: dict):
         """
-        Inserts or updates Club location records into the database.
-        
-        Args:
-            session: Active SQLAlchemy session.
-            club_data: List of dicts representing clubs from the ClubReady API.
-            audit: Dict with keys 'created_by' and 'updated_by' extracted from the event (e.g. Cognito claims).
+        Upserts club locations based on club_id uniqueness.
         """
         try:
             count = 0
             for club in club_data:
-                location = cls(
-                    club_id=club["Id"],
-                    name=club["Name"],
-                    district_id=club.get("DistrictId"),
-                    division_id=club.get("DivisionId"),
-                    club_type=club.get("ClubType"),
-                    credit_balance=club.get("CreditBalance"),
-                    time_offset=club.get("TimeOffset"),
-                    chain_id=club.get("ChainId"),
-                    street=club.get("Address", {}).get("Street"),
-                    city=club.get("Address", {}).get("City"),
-                    state_prov=club.get("Address", {}).get("StateProv"),
-                    postal_code=club.get("Address", {}).get("PostalCode"),
-                    phone=club.get("Phone"),
-                    email=club.get("Email"),
-                    location_name=club.get("LocationName"),
-                    updated_at=datetime.now(UTC),
-                    created_at=datetime.now(UTC),
-                    created_by=audit.get("created_by", "unknown"),
-                    updated_by=audit.get("updated_by", "unknown"),
-                    # Optional: populate Cognito attributes if available in club data.
-                    sub=club.get("sub"),
-                    iss=club.get("iss"),
-                    auth_time=club.get("auth_time"),
-                    aud=club.get("aud"),
-                    auth_time_human=club.get("auth_time_human")
-                )
-                session.merge(location)  # merge = insert or update
+                existing = session.query(cls).filter_by(club_id=club["Id"]).first()
+
+                if existing:
+                    # Update existing record
+                    existing.name = club["Name"]
+                    existing.district_id = club.get("DistrictId")
+                    existing.division_id = club.get("DivisionId")
+                    existing.club_type = club.get("ClubType")
+                    existing.credit_balance = club.get("CreditBalance")
+                    existing.time_offset = club.get("TimeOffset")
+                    existing.chain_id = club.get("ChainId")
+                    existing.street = club.get("Address", {}).get("Street")
+                    existing.city = club.get("Address", {}).get("City")
+                    existing.state_prov = club.get("Address", {}).get("StateProv")
+                    existing.postal_code = club.get("Address", {}).get("PostalCode")
+                    existing.phone = club.get("Phone")
+                    existing.email = club.get("Email")
+                    existing.location_name = club.get("LocationName")
+                    existing.updated_at = datetime.now(UTC)
+                    existing.updated_by = audit.get("updated_by", "unknown")
+                else:
+                    # Insert new record
+                    new_loc = cls(
+                        club_id=club["Id"],
+                        name=club["Name"],
+                        district_id=club.get("DistrictId"),
+                        division_id=club.get("DivisionId"),
+                        club_type=club.get("ClubType"),
+                        credit_balance=club.get("CreditBalance"),
+                        time_offset=club.get("TimeOffset"),
+                        chain_id=club.get("ChainId"),
+                        street=club.get("Address", {}).get("Street"),
+                        city=club.get("Address", {}).get("City"),
+                        state_prov=club.get("Address", {}).get("StateProv"),
+                        postal_code=club.get("Address", {}).get("PostalCode"),
+                        phone=club.get("Phone"),
+                        email=club.get("Email"),
+                        location_name=club.get("LocationName"),
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC),
+                        created_by=audit.get("created_by", "unknown"),
+                        updated_by=audit.get("updated_by", "unknown"),
+                        sub=club.get("sub"),
+                        iss=club.get("iss"),
+                        auth_time=club.get("auth_time"),
+                        aud=club.get("aud"),
+                        auth_time_human=club.get("auth_time_human")
+                    )
+                    session.add(new_loc)
                 count += 1
+
             session.commit()
-            logger.info(f"Synced {count} Club location(s) to DB.")
+            logger.info(f"✅ Upserted {count} club location(s) into DB.")
         except Exception as e:
-            logger.error(f"Failed to insert/update Club locations: {e}")
             session.rollback()
+            logger.error(f"❌ Failed to upsert Club locations: {e}", exc_info=True)
             raise
 
     @classmethod

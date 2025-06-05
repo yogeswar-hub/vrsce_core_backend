@@ -124,7 +124,7 @@ def lambda_handler(event, context):
         elif http_method == "GET":
             logger.info("Routing GET to fetch stored club_ready active members with pagination and filtration")
             try:
-                from com.dimcon.vrse_app.resources.vrse.vrse_club_active_members import ClubActiveMember
+                from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubActiveMember
                 engine = get_engine()
                 db_util = DBSessionUtil(engine)
                 with db_util.session_scope() as session:
@@ -154,16 +154,22 @@ def lambda_handler(event, context):
                 return ResponseBuilder.build_response(500, {
                     "error": "Failed to retrieve active members", "details": str(e)
                 })
-    
-    # Route GET for club_locations, club_users, and audit_log
+            # Route GET for club_locations, club_users, and audit_log
     if http_method == "GET":
         if resource == "club_locations":
-            logger.info("Routing to ClubLocationService.fetch_location_overview")
+            logger.info("Routing to ClubLocationService.fetch_all_locations_with_active_and_inactive_counts")
             svc = ClubLocationService()
             page = int(query_params.get("page", 1))
             limit = int(query_params.get("limit", 100))
-            data = svc.fetch_location_overview(page, limit)
-            return ResponseBuilder.build_response(200, data)
+            search_term = query_params.get("search")
+
+            try:
+                data = svc.fetch_all_locations_with_active_and_inactive_counts(page=page, limit=limit, search=search_term)
+                return ResponseBuilder.build_response(200, data)
+            except Exception as e:
+                logger.error("❌ Failed to fetch club_locations data", exc_info=True)
+                return ResponseBuilder.build_response(500, {"error": "Failed to fetch club locations"})
+
         if resource == "club_users":
             logger.info("Routing to ClubUsersService.fetch_users_by_location")
             if not location_id_for_log:

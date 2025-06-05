@@ -1,104 +1,135 @@
-# clubready_sync_service.py
-
-from datetime import datetime, UTC
-from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
+from datetime import datetime, timedelta
+from sqlalchemy import func
+from com.dimcon.vrse_app.services.club_ready_api_client import ClubReadyAPIClient
+from com.dimcon.vrse_app.services.club_ready_active_mem_service import ClubReadyActiveUsersService
+from com.dimcon.vrse_app.services.club_users_service import ClubUsersService
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 from com.dimcon.vrse_app.resources.vrse.vrse_platform_config import PlatformConfig
 from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
 from com.dimcon.vrse_app.resources.vrse.vrse_club_users import ClubUser
-from com.dimcon.vrse_app.services.club_ready_api_client import ClubReadyAPIClient
+from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubActiveMember
+from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 
 logger = LoggerManager.setup_logger(__name__)
 
-
 class ClubReadySyncService:
-    """
-    Syncs ClubReady data (locations and users) for each enabled platform.
-    Only records not already in the database will be inserted.
-    """
+    @staticmethod
+    def run_sync(audit: dict = None):
+        engine = get_engine()
+        db_util = DBSessionUtil(engine)
+        # Use a fixed date or dynamic date as required.
+        activity_date = "01-01-2020"
 
-    def __init__(self):
-        self.engine = get_engine()
-        self.db_util = DBSessionUtil(self.engine)
+        with db_util.session_scope() as session:
+            # 1. Fetch platform configs for club_ready (case-insensitive)
+            platform_records = session.query(PlatformConfig).filter(
+                func.lower(PlatformConfig.platform_name) == "club_ready"
+            ).all()
 
-    def sync_locations(self, config, session, audit):
+            # 2. Extract unique (auth_key, chain_id) pairs
+            unique_configs = {(p.auth_key.strip(), p.chain_id) for p in platform_records}
+            if len(unique_configs) != 1:
+                logger.error(
+                    f"Found {len(unique_configs)} unique ClubReady configs. Expected exactly 1. Fix your platform_config table."
+                )
+                logger.warning(f"Configs found: {list(unique_configs)}")
+                return
+
+            auth_key, chain_id = list(unique_configs)[0]
+            api_client = ClubReadyAPIClient(api_key=auth_key, chain_id=chain_id)
+
+            # 3. Sync Club Locations
+            try:
+                logger.info("Syncing club locations...")
+                locations = api_client.fetch_club_locations()
+                ClubLocation.insert_or_update_locations(session, locations, audit)
+                logger.info(f"Synced {len(locations)} locations into club_locations table.")
+            except Exception as e:
+                logger.error("Failed to sync locations", exc_info=True)
+                return
+
+            # 4. Sync segmented users (existing logic), if needed...
+            try:
+                logger.info(f"👥 Fetching segmented users for activity_date={activity_date}")
+                segmented_users = ClubReadyActiveUsersService.sync_all_user_segments(
+                    activity_date=activity_date,
+                    activity_operator="GT",
+                    api_client=api_client
+                )
+                logger.info(f"Fetched {len(segmented_users)} users from /users endpoint")
+            except Exception as e:
+                logger.error("Failed to fetch segmented users", exc_info=True)
+                return
+
+            # 5. NEW STEP: Sync all users using /users/find API and process duplicates.
+            ClubReadySyncService.sync_all_users(audit, api_client, session)
+
+            # 6. Finally, insert segmented users into active members.
+            try:
+                ClubActiveMember.bulk_insert_active_members(session, segmented_users)
+                logger.info("Inserted segmented users into club_active_members")
+            except Exception as e:
+                logger.error("Failed to insert into club_active_members", exc_info=True)
+
+    @staticmethod
+    def sync_all_users(audit: dict, api_client: ClubReadyAPIClient, session):
         """
-        Sync club locations for a single configuration – only insert new locations.
+        Fetch all users using the /users/find API in paginated mode,
+        group the users by email and process duplicates:
+         - For unique emails: Insert only if not exists.
+         - For duplicate emails: Use the record with the maximum user_id.
         """
-        client = ClubReadyAPIClient(config.auth_key, config.chain_id)
-        fetched_locations = client.fetch_club_locations()
-        logger.info(f"Fetched {len(fetched_locations)} locations for platform: {config.platform_name}")
-
-        # Get existing club IDs in the DB.
-        existing_ids = {loc for (loc,) in session.query(ClubLocation.club_id).all()}
-        new_locations = [loc for loc in fetched_locations if loc.get("Id") not in existing_ids]
-        logger.info(f"Found {len(new_locations)} new locations for platform: {config.platform_name}")
-
-        if new_locations:
-            ClubLocation.insert_new_locations(session, new_locations, audit)
-            logger.info(f"Inserted {len(new_locations)} new location(s) for {config.platform_name}")
-        else:
-            logger.info("No new locations to sync.")
-
-    def sync_users(self, config, audit):
-        """
-        Sync club users for a single configuration – only insert new users.
-        """
-        client = ClubReadyAPIClient(config.auth_key, config.chain_id)
-        all_users = client.fetch_all_users_parallel_dynamic(limit=100, batch_size=1)
-        logger.info(f"Fetched a total of {len(all_users)} users from ClubReady API using dynamic parallel tasks.")
-
-        # Open a session to filter out new users.
-        with self.db_util.session_scope() as session:
-            existing_user_ids = {uid for (uid,) in session.query(ClubUser.user_id).all()}
-            new_users = [user for user in all_users if user.get("UserId") not in existing_user_ids]
-            logger.info(f"Found {len(new_users)} new users for platform: {config.platform_name}")
-            
-            if new_users:
-                ClubUser.bulk_insert_users(session, new_users, audit)
-                logger.info(f"Inserted {len(new_users)} new club user(s) for {config.platform_name}")
-            else:
-                logger.info("No new users to sync.")
-
-    def run_sync(self, audit=None):
-        """
-        Runs the sync job for all enabled ClubReady platform configurations.
-        Deduplicates configurations by auth_key to avoid multiple fetches.
-        """
-        if audit is None:
-            audit = {"created_by": "club_ready_sync", "updated_by": "club_ready_sync"}
-
         try:
-            with self.db_util.session_scope() as session:
-                configs = session.query(PlatformConfig).filter_by(enable_member_sync=True).all()
-                if not configs:
-                    logger.warning("No enabled platform configurations found for ClubReady sync.")
-                    return
+            logger.info("Fetching all users in paginated batches via /users/find API...")
+            # Using existing API Client method that handles parallel dynamic fetch.
+            all_users = api_client.fetch_all_users_parallel_dynamic(limit=100, batch_size=10)
+            logger.info(f"Fetched total {len(all_users)} users from API.")
+        except Exception as ex:
+            logger.error(f"Error fetching all users: {ex}", exc_info=True)
+            return
 
-                unique_configs = {}
-                for config in configs:
-                    # Use the auth_key as the deduplication key; adjust if needed.
-                    if config.auth_key not in unique_configs:
-                        unique_configs[config.auth_key] = config
+        # Group users by email.
+        users_by_email = {}
+        for user in all_users:
+            email = user.get("Email")
+            if not email:
+                continue
+            users_by_email.setdefault(email, []).append(user)
 
-                for config in unique_configs.values():
-                    try:
-                        logger.info(f"Starting sync for platform: {config.platform_name} (ChainId: {config.chain_id})")
-                        self.sync_locations(config, session, audit)
-                        self.sync_users(config, audit)
+        # Separate into unique and duplicate records.
+        unique_users = []
+        duplicate_users = {}  # duplicate_users[email] = { "data": record_with_max_user_id, "all_ids": [list of user_ids] }
+        for email, records in users_by_email.items():
+            if len(records) == 1:
+                unique_users.append(records[0])
+            else:
+                max_record = max(records, key=lambda r: int(r.get("UserId", 0)))
+                duplicate_users[email] = {
+                    "data": max_record,
+                    "all_ids": [r.get("UserId") for r in records]
+                }
 
-                        # Update sync timestamps in the configuration record.
-                        config.last_synced_at = datetime.now(UTC)
-                        config.updated_at = datetime.now(UTC)
-                        session.commit()
-                        logger.info(f"Sync completed successfully for platform: {config.platform_name}")
-                    except Exception as e:
-                        session.rollback()
-                        logger.error(f"Sync failed for platform '{config.platform_name}': {e}")
-        except Exception as global_error:
-            logger.critical(f"Critical failure in ClubReady sync service: {global_error}", exc_info=True)
+        import json
+        logger.info("Duplicate Users JSON: " + json.dumps(duplicate_users))
 
-if __name__ == "__main__":
-    sync_service = ClubReadySyncService()
-    sync_service.run_sync({"created_by": "actual_cognito_user", "updated_by": "actual_cognito_user"})
+        # Process unique users: insert if not present in ClubUser table.
+        for user in unique_users:
+            email = user.get("Email")
+            existing = ClubUser.get_by_email(session, email)  # Assumes this method exists in ClubUser.
+            if existing:
+                logger.info(f"Unique user already exists in DB for email: {email}")
+            else:
+                ClubUser.insert_single_user(session, user, audit)
+                logger.info(f"Inserted unique user for email: {email}")
+
+        # Process duplicate users: for each email, use the record with the maximum user_id.
+        for email, entry in duplicate_users.items():
+            record = entry["data"]
+            existing = ClubUser.get_by_email(session, email)
+            if existing:
+                ClubUser.update_user(session, record, audit)
+                logger.info(f"Updated duplicate user for email: {email} using record with max user_id.")
+            else:
+                ClubUser.insert_single_user(session, record, audit)
+                logger.info(f"Inserted duplicate user for email: {email} using record with max user_id.")
