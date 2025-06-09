@@ -5,9 +5,9 @@ from com.dimcon.vrse_app.services.platform_config_service_post import PlatformCo
 from com.dimcon.vrse_app.services.club_location_service import ClubLocationService
 from com.dimcon.vrse_app.services.club_users_service import ClubUsersService
 from com.dimcon.vrse_app.services.audit_log_service import AuditLogService
-from com.dimcon.vrse_app.utilities.responses import ResponseBuilder
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
+from com.dimcon.vrse_app.utilities.responses import ResponseBuilder
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -17,11 +17,15 @@ def lambda_handler(event, context):
     logger.info("Received event with keys: %s", list(event.keys()))
     
     # Check if this is an EventBridge scheduled event.
-    # Scheduled events typically include a "source" field with value "aws.events"
     if event.get("source") == "aws.events":
         logger.info("EventBridge scheduled event detected. Triggering Club Ready sync job.")
+        # Extract detail (page range etc.) from the event and merge with default audit fields.
+        audit = event.get("detail", {})
+        audit.setdefault("created_by", "eventbridge")
+        audit.setdefault("updated_by", "eventbridge")
+        
         from com.dimcon.vrse_app.services.club_ready_sync_service import ClubReadySyncService
-        ClubReadySyncService().run_sync(audit={"created_by": "eventbridge", "updated_by": "eventbridge"})
+        ClubReadySyncService().run_sync(audit=audit)
         return ResponseBuilder.build_response(200, {"message": "ClubReady sync triggered via EventBridge."})
     
     # Otherwise, assume API Gateway event and process normally.
@@ -154,7 +158,7 @@ def lambda_handler(event, context):
                 return ResponseBuilder.build_response(500, {
                     "error": "Failed to retrieve active members", "details": str(e)
                 })
-            # Route GET for club_locations, club_users, and audit_log
+    # Route GET for club_locations, club_users, and audit_log
     if http_method == "GET":
         if resource == "club_locations":
             logger.info("Routing to ClubLocationService.fetch_all_locations_with_active_and_inactive_counts")
@@ -185,10 +189,26 @@ def lambda_handler(event, context):
             return ResponseBuilder.build_response(200, payload)
         if resource == "audit_log":
             logger.info("Routing to AuditLogService.get_audit_logs")
-            page = int(query_params.get("page", 1))
-            limit = int(query_params.get("limit", 20))
-            payload = AuditLogService.get_audit_logs(page, limit)
-            return ResponseBuilder.build_response(200, payload)
+            page       = query_params.get("page", 1)
+            limit      = query_params.get("limit", 20)
+            searchTerm = query_params.get("search")
+            startDate  = query_params.get("start_date")
+            endDate    = query_params.get("end_date")
+            try:
+                payload = AuditLogService.get_audit_logs(
+                    page=page,
+                    limit=limit,
+                    search=searchTerm,
+                    start_date=startDate,
+                    end_date=endDate
+                )
+                return ResponseBuilder.build_response(200, payload)
+            except ValueError as ve:
+                # Bad pagination input
+                return ResponseBuilder.build_response(400, {"error": str(ve)})
+            except Exception as e:
+                logger.error("Failed in get_audit_logs: %s", e, exc_info=True)
+                return ResponseBuilder.build_response(500, {"error": "Failed to retrieve audit logs"})
         logger.error("Invalid resource for GET method: %s", resource)
         return ResponseBuilder.build_response(400, {"error": "Invalid resource for GET method."})
     

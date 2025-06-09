@@ -1,3 +1,6 @@
+from sqlalchemy import func
+from dateutil import parser
+from datetime import datetime
 from com.dimcon.vrse_app.resources.vrse.vrse_audit_log import AuditLog
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
@@ -71,17 +74,65 @@ class AuditLogService:
             logger.error("Failed to log audit: %s", e, exc_info=True)
 
     @staticmethod
-    def get_audit_logs(page=1, limit=20):
+    def get_audit_logs(page=1, limit=20, search=None, start_date=None, end_date=None):
+        """
+        Retrieve audit logs with optional search filtering and date range filtering.
+          - search: a string to search in resource, action, or username fields (case-insensitive)
+          - start_date: filter logs with accessed_at >= start_date (parseable format, e.g., "06-06-2025")
+          - end_date:   filter logs with accessed_at <= end_date (same as above)
+        """
         try:
+            # --- parse dates ------------------------------------------------
+            if start_date:
+                try:
+                    start_date = parser.parse(start_date)
+                except Exception as e:
+                    logger.error("Failed to parse start_date '%s': %s", start_date, e)
+                    start_date = None
+            if end_date:
+                try:
+                    end_date = parser.parse(end_date)
+                except Exception as e:
+                    logger.error("Failed to parse end_date '%s': %s", end_date, e)
+                    end_date = None
+            # ------------------------------------------------------------------
+
+            # ---- sanitize pagination -----------------------------------------
+            page   = max(1, int(page))      # force int and minimum 1
+            limit  = max(1, int(limit))     # force int and minimum 1
+            offset = (page - 1) * limit
+            # ------------------------------------------------------------------
+
             engine = get_engine()
             db_util = DBSessionUtil(engine)
             with db_util.session_scope() as session:
-                base_query = session.query(AuditLog).order_by(AuditLog.accessed_at.desc())
+                base_query = session.query(AuditLog)
+
+                if search:
+                    term = f"%{search.lower()}%"
+                    base_query = base_query.filter(
+                        func.lower(AuditLog.resource).like(term) |
+                        func.lower(AuditLog.action).like(term)   |
+                        func.lower(AuditLog.username).like(term)
+                    )
+
+                if start_date:
+                    base_query = base_query.filter(AuditLog.accessed_at >= start_date)
+                if end_date:
+                    base_query = base_query.filter(AuditLog.accessed_at <= end_date)
+
+                base_query = base_query.order_by(AuditLog.accessed_at.desc())
                 total_count = base_query.count()
-                logs = base_query.limit(limit).offset((page - 1) * limit).all()
+
+                logs = base_query.limit(limit).offset(offset).all()
                 results = [log.to_dict() for log in logs]
-                logger.info("Retrieved %s audit log records out of %s", len(results), total_count)
+
+                logger.info(
+                    "Retrieved %s audit log record(s) out of %s", 
+                    len(results), total_count
+                )
                 return {"total_count": total_count, "results": results}
+
         except Exception as e:
             logger.error("Failed to retrieve audit logs: %s", e, exc_info=True)
             raise

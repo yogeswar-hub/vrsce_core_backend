@@ -59,40 +59,39 @@ class ClubActiveMember(Base):
         try:
             if cls.__tablename__ not in inspector.get_table_names():
                 cls.__table__.create(bind=engine)
-                logger.info(f"✅ Table '{cls.__tablename__}' created successfully.")
+                logger.info(f" Table '{cls.__tablename__}' created successfully.")
             else:
-                logger.info(f"ℹ️ Table '{cls.__tablename__}' already exists.")
+                logger.info(f" Table '{cls.__tablename__}' already exists.")
         except Exception as e:
-            logger.error(f"❌ Failed to create table '{cls.__tablename__}': {e}", exc_info=True)
+            logger.error(f" Failed to create table '{cls.__tablename__}': {e}", exc_info=True)
             raise
 
     @classmethod
     def bulk_insert_active_members(cls, session, members: list[dict]):
         """
-        Bulk inserts active members from ClubReady and includes the segment value.
-
+        Bulk upserts active members from ClubReady and includes the segment value.
+        If a record with the same (user_id, segment) exists, it will be updated.
         Args:
             session: Active DB session.
             members: List of ClubReady user records.
         """
         values = []
-        inserted_count = 0
-
         for member in members:
             user_id = member.get("UserId")
-            user_id_str = str(user_id).strip()
+            if not user_id:
+                logger.warning(f"Skipping record with missing UserId: {member}")
+                continue
+
+            # Log the segment value for debugging.
+            segment_value = member.get("Segment") or member.get("segment")
+            logger.debug(f"Inserting club Ready member for user_id {user_id} with segment: {segment_value}")
 
             activity_date = None
             if member.get("ActivityDate"):
                 try:
                     activity_date = datetime.fromisoformat(member["ActivityDate"])
                 except Exception as date_err:
-                    logger.warning(f"⚠️ Invalid ActivityDate for user {user_id}: {date_err}")
-
-            # Skip invalid user_id
-            if not user_id:
-                logger.warning(f"⚠️ Skipping record with missing UserId: {member}")
-                continue
+                    logger.warning(f"Invalid ActivityDate for user {user_id}: {date_err}")
 
             values.append({
                 "user_id": user_id,
@@ -105,21 +104,29 @@ class ClubActiveMember(Base):
                 "activity_type": member.get("ActivityType"),
                 "referral_type_id": member.get("ReferralTypeId"),
                 "referral_type_name": member.get("ReferralTypeName"),
-                "segment": member.get("Segment"),
+                "segment": segment_value,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc)
             })
 
         if not values:
-            logger.info("⚠️ No valid ClubReady member data to insert.")
+            logger.info(" No valid ClubReady member data to upsert.")
             return
 
         try:
-            session.bulk_insert_mappings(cls, values)
-            inserted_count = len(values)
-            logger.info(f"✅ Successfully inserted {inserted_count} ClubReady members into DB.")
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            # Build the insert statement using the PostgreSQL dialect.
+            stmt = pg_insert(cls).values(values)
+            stmt = stmt.on_conflict_do_nothing(
+                index_elements=["user_id", "segment"]
+            )
+            session.execute(stmt)
+
+            session.commit()
+            logger.info(f" Successfully upserted {len(values)} ClubReady member(s) into DB.")
         except Exception as e:
-            logger.error("❌ Failed to insert ClubReady members.", exc_info=True)
+            session.rollback()
+            logger.error(" Failed to upsert ClubReady members.", exc_info=True)
             raise
 
     @classmethod
@@ -133,11 +140,11 @@ class ClubActiveMember(Base):
         try:
             if cls.__tablename__ in inspector.get_table_names():
                 cls.__table__.drop(bind=engine)
-                logger.info(f"🗑️ Dropped table '{cls.__tablename__}' successfully.")
+                logger.info(f" Dropped table '{cls.__tablename__}' successfully.")
             else:
-                logger.info(f"ℹ️ Table '{cls.__tablename__}' does not exist.")
+                logger.info(f" Table '{cls.__tablename__}' does not exist.")
         except Exception as e:
-            logger.error(f"❌ Failed to drop table '{cls.__tablename__}': {e}", exc_info=True)
+            logger.error(f" Failed to drop table '{cls.__tablename__}': {e}", exc_info=True)
             raise
 
 if __name__ == "__main__":

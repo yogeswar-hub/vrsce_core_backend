@@ -14,12 +14,12 @@ def test_get_club_locations():
         "requestContext": {
             "authorizer": {
                 "claims": {
-                    "sub": "user-123",
+                    "sub": "sai",
                     "email": "user@example.com",
                     "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_fake",
                     "auth_time": "1680000000",
                     "aud": "client_id_here",
-                    "username": "johndoe"
+                    "username": "sai"
                 }
             }
         }
@@ -44,12 +44,12 @@ def test_get_club_users():
         "requestContext": {
             "authorizer": {
                 "claims": {
-                    "sub": "user-123",
+                    "sub": "sai",
                     "email": "user@example.com",
                     "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_fake",
                     "auth_time": "1680000000",
                     "aud": "client_id_here",
-                    "username": "johndoe"
+                    "username": "sai"
                 }
             }
         }

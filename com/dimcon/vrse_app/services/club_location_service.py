@@ -18,18 +18,18 @@ class ClubLocationService(BaseDAO):
     def fetch_all_locations_with_active_and_inactive_counts(self, page=1, limit=10, search=None):
         with self.db_util.session_scope() as session:
             try:
-                logger.info("📍 Starting location fetch with active/inactive counts")
+                logger.info("📍 Starting location fetch with counts by latest_segment")
 
+                # Query: group by location and latest_segment.
                 query = (
                     session.query(
                         ClubLocation.club_id.label("id"),
                         ClubLocation.name.label("name"),
-                        func.count(case((ClubActiveMember.segment == 'Active', 1))).label("active_users"),
-                        func.count(case((ClubActiveMember.segment == 'Inactive', 1))).label("inactive_users")
+                        func.coalesce(func.lower(ClubUser.latest_segment), 'no status assigned').label("latest_segment"),
+                        func.count(ClubUser.user_id).label("user_count")
                     )
                     .join(ClubUser, ClubUser.primary_store_id == ClubLocation.club_id)
-                    .join(ClubActiveMember, ClubActiveMember.user_id == ClubUser.user_id)
-                    .group_by(ClubLocation.club_id, ClubLocation.name)
+                    .group_by(ClubLocation.club_id, ClubLocation.name, func.coalesce(func.lower(ClubUser.latest_segment), 'no status assigned'))
                     .order_by(ClubLocation.name.asc())
                 )
 
@@ -38,27 +38,60 @@ class ClubLocationService(BaseDAO):
                     query = query.filter(func.lower(ClubLocation.name).like(search_term))
                     logger.info(f"🔍 Applied search filter for term: {search}")
 
-                total = query.count()
-                logger.debug(f"📦 Total matching locations: {total}")
+                # Get raw results.
+                rows = query.all()
+                logger.debug(f"📦 Total grouped rows returned: {len(rows)}")
 
-                paginated_query = query.limit(limit).offset((page - 1) * limit)
-                results = paginated_query.all()
+                # Transform grouped rows into a simpler structure per location.
+                locations = {}
+                for row in rows:
+                    loc_id = row.id
+                    if loc_id not in locations:
+                        locations[loc_id] = {
+                            "id":                    loc_id,
+                            "name":                  row.name,
+                            "active_users":          0,
+                            "inactive_users":        0,
+                            "all_users":             0,
+                            "no_status_assigned":    0,
+                            "prospects_users":       0,   # new
+                            "past_due_users":        0    # new
+                        }
+                    seg   = row.latest_segment
+                    count = row.user_count
 
-                logger.info("✅ Successfully fetched paginated results")
+                    if   seg == "active":
+                        locations[loc_id]["active_users"] = count
+                    elif seg == "inactive":
+                        locations[loc_id]["inactive_users"] = count
+                    elif seg == "all":
+                        locations[loc_id]["all_users"] = count
+                    elif seg == "prospects":                      # new
+                        locations[loc_id]["prospects_users"] = count
+                    elif seg == "pastdue":                        # new (lowercase from DB)
+                        locations[loc_id]["past_due_users"] = count
+                    elif seg == "no status assigned":
+                        locations[loc_id]["no_status_assigned"] = count
+                    else:
+                        # unexpected segment → lump into no_status_assigned
+                        locations[loc_id]["no_status_assigned"] += count
+
+                all_locations = list(locations.values())
+                total = len(all_locations)
+                logger.info("✅ Successfully grouped simplified location results by segments")
+
+                # Apply pagination manually.
+                start = (page - 1) * limit
+                end = start + limit
+                paginated_locations = all_locations[start:end]
+
                 return {
-                    "results": [
-                        {
-                            "id": row.id,
-                            "name": row.name,
-                            "active_users": row.active_users,
-                            "inactive_users": row.inactive_users
-                        } for row in results
-                    ],
+                    "results": paginated_locations,
                     "total_count": total,
                     "page": page,
                     "limit": limit
                 }
 
             except Exception as e:
-                logger.error("❌ Error fetching paginated location user counts", exc_info=True)
+                logger.error("❌ Error fetching paginated location counts by latest_segment", exc_info=True)
                 raise

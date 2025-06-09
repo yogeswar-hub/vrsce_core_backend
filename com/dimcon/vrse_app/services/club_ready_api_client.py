@@ -2,6 +2,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = LoggerManager.setup_logger(__name__)
 
@@ -34,31 +35,28 @@ class ClubReadyAPIClient:
 
     def fetch_all_users_parallel_dynamic(self, limit: int = 100, batch_size: int = 10) -> List[dict]:
         all_users = []
-        current_page = 1
+        current = 1
         while True:
-            pages = list(range(current_page, current_page + batch_size))
+            pages = range(current, current + batch_size)
             batch_results = {}
-            with ThreadPoolExecutor(max_workers=batch_size) as executor:
-                future_to_page = {
-                    executor.submit(self.fetch_users, page, limit): page for page in pages
-                }
-                for future in as_completed(future_to_page):
-                    page_num = future_to_page[future]
-                    try:
-                        users = future.result()
-                        batch_results[page_num] = users
-                    except Exception as err:
-                        logger.error(f"Error fetching page {page_num}: {err}")
-                        batch_results[page_num] = []
 
-            for page in sorted(batch_results.keys()):
-                users = batch_results[page]
-                if not users or len(users) < limit:
-                    all_users.extend(users)
+            with ThreadPoolExecutor(max_workers=batch_size) as ex:
+                fut2p = {ex.submit(self.fetch_users, p, limit): p for p in pages}
+                for f in as_completed(fut2p):
+                    p = fut2p[f]
+                    try:
+                        batch_results[p] = f.result()
+                    except Exception as err:
+                        logger.error(f"Error fetching page {p}: {err}")
+                        batch_results[p] = []
+
+            for p in sorted(batch_results):
+                users = batch_results[p]
+                if not users:
                     return all_users
-                else:
-                    all_users.extend(users)
-            current_page += batch_size
+                all_users.extend(users)
+
+            current += batch_size
 
     def fetch_users(self, page: int, limit: int = 100) -> List[dict]:
         url = f"{self.BASE_URL}/users/find"
@@ -72,7 +70,7 @@ class ClubReadyAPIClient:
             logger.error(f"Failed to fetch users from page {page}: {e}")
             raise
 
-    def fetch_active_users(self, activity_date: str, activity_operator: str, segment: str = "Active", version: int = 2) -> list:
+    def fetch_users_activity(self, activity_date: str, activity_operator: str, segment: str = "Active", version: int = 2) -> list:
         url = f"{self.BASE_URL}/users"
         params = self.params.copy()
         params.update({
@@ -84,9 +82,15 @@ class ClubReadyAPIClient:
         try:
             response = requests.get(url, params=params)
             response.raise_for_status()
-            data = response.json()
-            logger.info(f"Fetched {len(data)} users from segment {segment}.")
-            return data
+            payload = response.json()
+            if isinstance(payload, dict):
+                users = payload.get("users", [])
+            elif isinstance(payload, list):
+                users = payload
+            else:
+                users = []
+            logger.info(f"Fetched {len(users)} users from segment {segment}.")
+            return users
         except Exception as e:
             logger.error(f"Failed to fetch active users: {e}")
             raise
@@ -126,3 +130,31 @@ class ClubReadyAPIClient:
         except Exception as e:
             logger.error(f"Failed to find user by name {first_name} {last_name}: {e}")
             return None
+
+
+def fetch_users_range(api_client, start_page, end_page, limit=100, batch_size=10):
+    """
+    Fetch users in the given page range using api_client.fetch_users,
+    in batches of up to batch_size pages at a time.
+    """
+    all_users = []
+    pages = list(range(start_page, end_page + 1))
+
+    for i in range(0, len(pages), batch_size):
+        batch = pages[i : i + batch_size]
+        results = {}
+
+        with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+            futures = {executor.submit(api_client.fetch_users, p, limit): p for p in batch}
+            for future in as_completed(futures):
+                p = futures[future]
+                try:
+                    results[p] = future.result()
+                except Exception:
+                    results[p] = []
+
+        # even if a page is empty, continue through the full range
+        for p in sorted(results):
+            all_users.extend(results[p])
+
+    return all_users

@@ -16,7 +16,7 @@ def test_post_platform_config():
         "sub": "cognito-user-sub",
         "username": "cognito_username",
         "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXXXXXX",
-        "aud": "client_id_here"
+        "aud": "client_id"
     }
 
     # Build a simulated API Gateway event for a POST to /platform_config
@@ -29,12 +29,12 @@ def test_post_platform_config():
         "requestContext": {
             "authorizer": {
                 "claims": {
-                    "sub": "user-123",
+                    "sub": "cognito-user-sub",
                     "email": "user@example.com",
                     "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXXXXXX",
                     "auth_time": "1680000000",
                     "aud": "client_id_here",
-                    "username": "johndoe"
+                    "username": "yogi"
                 }
             }
         }
