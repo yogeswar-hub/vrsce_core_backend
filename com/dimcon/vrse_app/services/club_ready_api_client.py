@@ -1,36 +1,37 @@
+import os
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = LoggerManager.setup_logger(__name__)
+
+# 1) Read BASE_URL from env var, error out if unset
+BASE_URL = os.getenv("CLUBREADY_BASE_URL")
+if not BASE_URL:
+    raise EnvironmentError("Missing required env var: CLUBREADY_BASE_URL")
 
 class ClubReadyAPIClient:
     """
     API Client for interacting with ClubReady endpoints.
-    Handles location and user data sync.
+    BASE_URL is injected via environment; no hard-codes.
     """
 
-    BASE_URL = "https://clubready.com/api/current"
-
     def __init__(self, api_key: str, chain_id: int):
-        self.api_key = api_key
+        self.api_key  = api_key
         self.chain_id = chain_id
-        self.params = {
-            "ApiKey": self.api_key,
-            "ChainId": self.chain_id
-        }
+        self.params   = {"ApiKey": api_key, "ChainId": chain_id}
 
     def fetch_club_locations(self) -> List[dict]:
-        url = f"{self.BASE_URL}/corp/{self.chain_id}/clubs"
+        # 2) Use the injected BASE_URL
+        url = f"{BASE_URL}/corp/{self.chain_id}/clubs"
         try:
-            response = requests.get(url, params=self.params)
+            response = requests.get(url, params=self.params, timeout=30)
             response.raise_for_status()
-            logger.info("✅ Fetched club locations from ClubReady API")
+            logger.info("Fetched club locations from %s", url)
             return response.json()
         except requests.RequestException as e:
-            logger.error(f"❌ Failed to fetch club locations: {e}")
+            logger.error("Failed to fetch club locations: %s", e)
             raise
 
     def fetch_all_users_parallel_dynamic(self, limit: int = 100, batch_size: int = 10) -> List[dict]:
@@ -40,18 +41,23 @@ class ClubReadyAPIClient:
             pages = range(current, current + batch_size)
             batch_results = {}
 
-            with ThreadPoolExecutor(max_workers=batch_size) as ex:
-                fut2p = {ex.submit(self.fetch_users, p, limit): p for p in pages}
-                for f in as_completed(fut2p):
-                    p = fut2p[f]
+            with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                # map each submitted future to its page number
+                future_to_page = {
+                    executor.submit(self.fetch_users, page_number, limit): page_number
+                    for page_number in pages
+                }
+                for future in as_completed(future_to_page):
+                    page_number = future_to_page[future]
                     try:
-                        batch_results[p] = f.result()
+                        batch_results[page_number] = future.result()
                     except Exception as err:
-                        logger.error(f"Error fetching page {p}: {err}")
-                        batch_results[p] = []
+                        logger.error("Error fetching page %s: %s", page_number, err)
+                        batch_results[page_number] = []
 
-            for p in sorted(batch_results):
-                users = batch_results[p]
+            # collect and concatenate per‐page results
+            for page_number in sorted(batch_results):
+                users = batch_results[page_number]
                 if not users:
                     return all_users
                 all_users.extend(users)
@@ -59,7 +65,7 @@ class ClubReadyAPIClient:
             current += batch_size
 
     def fetch_users(self, page: int, limit: int = 100) -> List[dict]:
-        url = f"{self.BASE_URL}/users/find"
+        url = f"{BASE_URL}/users/find"
         params = self.params.copy()
         params.update({"page": page, "limit": limit})
         try:
@@ -71,7 +77,7 @@ class ClubReadyAPIClient:
             raise
 
     def fetch_users_activity(self, activity_date: str, activity_operator: str, segment: str = "Active", version: int = 2) -> list:
-        url = f"{self.BASE_URL}/users"
+        url = f"{BASE_URL}/users"
         params = self.params.copy()
         params.update({
             "ActivityDate": activity_date,
@@ -99,7 +105,7 @@ class ClubReadyAPIClient:
         """
         Search for a user using email.
         """
-        url = f"{self.BASE_URL}/users/find"
+        url = f"{BASE_URL}/users/find"
         params = self.params.copy()
         params.update({"Email": email})
         try:
@@ -117,7 +123,7 @@ class ClubReadyAPIClient:
         """
         Search for a user using first and last name.
         """
-        url = f"{self.BASE_URL}/users/find"
+        url = f"{BASE_URL}/users/find"
         params = self.params.copy()
         params.update({"FirstName": first_name, "LastName": last_name})
         try:
@@ -140,21 +146,24 @@ def fetch_users_range(api_client, start_page, end_page, limit=100, batch_size=10
     all_users = []
     pages = list(range(start_page, end_page + 1))
 
-    for i in range(0, len(pages), batch_size):
-        batch = pages[i : i + batch_size]
+    for start_index in range(0, len(pages), batch_size):
+        batch = pages[start_index : start_index + batch_size]
         results = {}
 
         with ThreadPoolExecutor(max_workers=len(batch)) as executor:
-            futures = {executor.submit(api_client.fetch_users, p, limit): p for p in batch}
-            for future in as_completed(futures):
-                p = futures[future]
+            # map each future to its page number for clarity
+            future_to_page = {
+                executor.submit(api_client.fetch_users, page_number, limit): page_number
+                for page_number in batch
+            }
+            for future in as_completed(future_to_page):
+                page_number = future_to_page[future]
                 try:
-                    results[p] = future.result()
+                    results[page_number] = future.result()
                 except Exception:
-                    results[p] = []
+                    results[page_number] = []
 
-        # even if a page is empty, continue through the full range
-        for p in sorted(results):
-            all_users.extend(results[p])
+        for page_number in sorted(results):
+            all_users.extend(results[page_number])
 
     return all_users

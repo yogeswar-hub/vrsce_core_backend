@@ -10,7 +10,7 @@ logger = LoggerManager.setup_logger(__name__)
 
 class AuditLogService:
     @staticmethod
-    def log_access(user_info, resource, http_method, location_id=None):
+    def log_access(user_info, resource, http_method, location_id=None, error_message: str=None):
         try:
             # Determine action messages based on resource, etc.
             if resource == "club_users":
@@ -42,13 +42,22 @@ class AuditLogService:
                     "POST":   "User created a new audit log entry.",  # if applicable
                     "DELETE": "User deleted an audit log entry."       # if applicable
                 }
+            elif resource == "club_ready_sync":
+                action_map = {
+                    "SCHEDULE": "System scheduled ClubReady sync via EventBridge.",
+                    "POST":     "System ran ClubReady sync.",
+                    "GET":      "System retrieved ClubReady sync status."
+                }
             else:
                 action_map = {
-                    "GET":    "User read data.",
-                    "PUT":    "User updated data.",
-                    "POST":   "User created a new record.",
-                    "DELETE": "User deleted data."
+                    "GET":    "System performed data retrieval.",
+                    "PUT":    "System updated data.",
+                    "POST":   "System created a new record.",
+                    "DELETE": "System deleted data."
                 }
+            action = action_map.get(http_method, "System performed an action")
+            if error_message:
+                action = f"{action} Error: {error_message}"
             
             engine = get_engine()
             db_util = DBSessionUtil(engine)
@@ -59,7 +68,7 @@ class AuditLogService:
                     email    = user_info.get("email", ""),
                     resource = resource,
                     method   = http_method,
-                    action   = action_map.get(http_method, "User performed an action")
+                    action   = action
                 )
                 if location_id:
                     log_entry.resource = f"{resource} (location: {location_id})"
@@ -97,9 +106,9 @@ class AuditLogService:
                     end_date = None
             # ------------------------------------------------------------------
 
-            # ---- sanitize pagination -----------------------------------------
-            page   = max(1, int(page))      # force int and minimum 1
-            limit  = max(1, int(limit))     # force int and minimum 1
+            # ----  pagination -----------------------------------------
+            page   = max(1, int(page))      
+            limit  = max(1, int(limit))    
             offset = (page - 1) * limit
             # ------------------------------------------------------------------
 
@@ -107,6 +116,16 @@ class AuditLogService:
             db_util = DBSessionUtil(engine)
             with db_util.session_scope() as session:
                 base_query = session.query(AuditLog)
+
+                # Exclude generic health-check or system pings:
+                # remove entries where user_id is 'unknown' and both email & username are empty/null
+                base_query = base_query.filter(
+                    ~(
+                        (AuditLog.user_id == "unknown")
+                        & ((AuditLog.username == None) | (AuditLog.username == ""))
+                        & ((AuditLog.email    == None) | (AuditLog.email    == ""))
+                    )
+                )
 
                 if search:
                     term = f"%{search.lower()}%"

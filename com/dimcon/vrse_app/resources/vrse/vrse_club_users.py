@@ -72,33 +72,33 @@ class ClubUser(Base):
 
         # 2) Build the list of rows to insert
         values = []
-        for u in users:
-            raw_ts = u.get("auth_time")
+        for user in users:
+            raw_ts = user.get("auth_time")
             auth_time_human = None
             if raw_ts:
                 try:
                     auth_time_human = datetime.fromtimestamp(int(raw_ts), tz=timezone.utc).isoformat()
                 except Exception:
-                    logger.warning(f"Invalid auth_time for user {u.get('UserId')}")
+                    logger.warning(f"Invalid auth_time for user {user.get('UserId')}")
 
             values.append({
-                "user_id":           u["UserId"],
-                "email":             u["Email"],
-                "first_name":        u.get("FirstName"),
-                "last_name":         u.get("LastName"),
-                "barcode":           u.get("Barcode"),
-                "username":          u.get("Username"),
-                "referral_type_id":  u.get("ReferralTypeId"),
-                "primary_store_id":  u.get("PrimaryStoreId"),
+                "user_id":           user["UserId"],
+                "email":             user["Email"],
+                "first_name":        user.get("FirstName"),
+                "last_name":         user.get("LastName"),
+                "barcode":           user.get("Barcode"),
+                "username":          user.get("Username"),
+                "referral_type_id":  user.get("ReferralTypeId"),
+                "primary_store_id":  user.get("PrimaryStoreId"),
                 "created_at":        datetime.now(timezone.utc),
                 "updated_at":        datetime.now(timezone.utc),
                 "synced_at":         datetime.now(timezone.utc),
                 "created_by":        audit["created_by"],
                 "updated_by":        audit["updated_by"],
-                "sub":               u.get("sub"),
-                "iss":               u.get("iss"),
+                "sub":               user.get("sub"),
+                "iss":               user.get("iss"),
                 "auth_time":         raw_ts,
-                "aud":               u.get("aud"),
+                "aud":               user.get("aud"),
                 "auth_time_human":   auth_time_human,
             })
 
@@ -150,33 +150,33 @@ class ClubUser(Base):
         audit.setdefault("created_by", "system")
         audit.setdefault("updated_by", "system")
         values = []
-        for u in users:
+        for user in users:
             auth_time_human = None
-            raw_ts = u.get("auth_time")
+            raw_ts = user.get("auth_time")
             if raw_ts:
                 try:
                     auth_time_human = datetime.fromtimestamp(int(raw_ts), tz=timezone.utc).isoformat()
                 except Exception:
-                    logger.warning(f"Invalid auth_time for user {u.get('UserId')}")
+                    logger.warning(f"Invalid auth_time for user {user.get('UserId')}")
 
             values.append({
-                "user_id":          u.get("UserId"),
-                "email":            u.get("Email"),
-                "first_name":       u.get("FirstName"),
-                "last_name":        u.get("LastName"),
-                "barcode":          u.get("Barcode"),
-                "username":         u.get("Username"),
-                "referral_type_id": u.get("ReferralTypeId"),
-                "primary_store_id": u.get("PrimaryStoreId"),
+                "user_id":          user.get("UserId"),
+                "email":            user.get("Email"),
+                "first_name":       user.get("FirstName"),
+                "last_name":        user.get("LastName"),
+                "barcode":          user.get("Barcode"),
+                "username":         user.get("Username"),
+                "referral_type_id": user.get("ReferralTypeId"),
+                "primary_store_id": user.get("PrimaryStoreId"),
                 "created_at":       datetime.now(timezone.utc),
                 "updated_at":       datetime.now(timezone.utc),
                 "synced_at":        datetime.now(timezone.utc),
                 "created_by":       audit.get("created_by"),
                 "updated_by":       audit.get("updated_by"),
-                "sub":              u.get("sub"),
-                "iss":              u.get("iss"),
+                "sub":              user.get("sub"),
+                "iss":              user.get("iss"),
                 "auth_time":        raw_ts,
-                "aud":              u.get("aud"),
+                "aud":              user.get("aud"),
                 "auth_time_human":  auth_time_human,
             })
 

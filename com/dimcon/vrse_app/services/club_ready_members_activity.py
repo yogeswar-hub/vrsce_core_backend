@@ -4,7 +4,7 @@ from com.dimcon.vrse_app.services.club_ready_api_client import ClubReadyAPIClien
 
 logger = LoggerManager.setup_logger(__name__)
 
-class ClubReadyActiveUsersService:
+class ClubReadyActivityUsersService:
     @staticmethod
     def sync_all_user_segments(activity_date: str, activity_operator: str, api_client):
         logger.info(f" Filtering users with activity_date {activity_operator} {activity_date}")
