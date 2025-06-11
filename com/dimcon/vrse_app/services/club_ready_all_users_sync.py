@@ -5,7 +5,7 @@ from com.dimcon.vrse_app.services.club_ready_api_client import ClubReadyAPIClien
 from com.dimcon.vrse_app.services.club_ready_members_activity import ClubReadyActivityUsersService
 from com.dimcon.vrse_app.services.club_users_service import ClubUsersService
 from com.dimcon.vrse_app.resources.vrse.vrse_club_users import ClubUser
-from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubActiveMember
+from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubMemberActivity
 from com.dimcon.vrse_app.services.club_ready_user_validator_before_upsert import ClubUserValidator
 
 logger = logging.getLogger(__name__)

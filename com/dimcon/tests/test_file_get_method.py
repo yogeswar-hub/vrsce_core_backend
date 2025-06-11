@@ -1,3 +1,8 @@
+# filepath: com/dimcon/tests/test_file_get_method.py
+import os
+#  ← must set the real ENV, not just a Python variable
+os.environ["CLUBREADY_BASE_URL"] = "https://mock.clubready.local"
+
 import json
 from com.dimcon.vrse_app.handlers.lambda_entry_point import lambda_handler
 

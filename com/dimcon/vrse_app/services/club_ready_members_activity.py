@@ -1,4 +1,4 @@
-from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubActiveMember
+from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubMemberActivity
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 from com.dimcon.vrse_app.services.club_ready_api_client import ClubReadyAPIClient
 

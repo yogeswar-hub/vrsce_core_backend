@@ -1,7 +1,7 @@
 from sqlalchemy import or_, func, case, update
 from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
 from com.dimcon.vrse_app.resources.vrse.vrse_club_users import ClubUser
-from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubActiveMember
+from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubMemberActivity
 from com.dimcon.vrse_app.resources.base_dao import BaseDAO
 from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
@@ -139,12 +139,12 @@ class ClubUsersService(BaseDAO):
         # Build a subquery that returns one row per user (the latest activity).
         subq = (
             session.query(
-                ClubActiveMember.user_id,
-                ClubActiveMember.segment,
-                ClubActiveMember.activity_date,
+                ClubMemberActivity.user_id,
+                ClubMemberActivity.segment,
+                ClubMemberActivity.activity_date,
                 func.row_number().over(
-                    partition_by=ClubActiveMember.user_id,
-                    order_by=ClubActiveMember.activity_date.desc()
+                    partition_by=ClubMemberActivity.user_id,
+                    order_by=ClubMemberActivity.activity_date.desc()
                 ).label("rn")
             )
             .subquery()

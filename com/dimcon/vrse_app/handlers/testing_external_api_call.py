@@ -1,5 +1,9 @@
 import json
+import os
 from com.dimcon.vrse_app.handlers.lambda_entry_point import lambda_handler
+
+# 1) Read BASE_URL from env var, fall back to a safe default (e.g. local stub or prod URL)
+BASE_URL = os.getenv("CLUBREADY_BASE_URL", "https://dev.clubready.example.com")
 
 def test_post_platform_config():
     # Define the config data to be inserted.

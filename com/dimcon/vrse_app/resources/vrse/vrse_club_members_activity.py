@@ -9,7 +9,7 @@ from sqlalchemy import UniqueConstraint
 logger = LoggerManager.setup_logger(__name__)
 
 
-class ClubActiveMember(Base):
+class ClubMemberActivity(Base):
     """
     ORM model representing active members pulled from the ClubReady platform.
 
@@ -153,4 +153,4 @@ if __name__ == "__main__":
 
     engine = get_engine()
     db_util = DBSessionUtil(engine)
-    ClubActiveMember.create_table(engine)
+    ClubMemberActivity.create_table(engine)

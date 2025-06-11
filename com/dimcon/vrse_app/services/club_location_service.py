@@ -1,5 +1,5 @@
 from sqlalchemy import func, case
-from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubActiveMember
+from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubMemberActivity
 from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
 from com.dimcon.vrse_app.resources.vrse.vrse_club_users import ClubUser
 from com.dimcon.vrse_app.resources.base_dao import BaseDAO

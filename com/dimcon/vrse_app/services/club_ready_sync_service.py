@@ -8,7 +8,7 @@ from com.dimcon.vrse_app.services.audit_log_service import AuditLogService
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 from com.dimcon.vrse_app.resources.vrse.vrse_platform_config import PlatformConfig
 from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
-from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubActiveMember
+from com.dimcon.vrse_app.resources.vrse.vrse_club_members_activity import ClubMemberActivity
 from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 
@@ -83,7 +83,7 @@ class ClubReadySyncService:
             # 6) Insert segmented users into club_active_members
             try:
                 logger.info("Step 6: Inserting %d segmented users…", len(segmented_users))
-                ClubActiveMember.bulk_insert_active_members(session, segmented_users)
+                ClubMemberActivity.bulk_insert_active_members(session, segmented_users)
                 logger.info("Inserted segmented users")
                 AuditLogService.log_access(system_user, "club_ready_sync", "POST")
             except Exception as e:
