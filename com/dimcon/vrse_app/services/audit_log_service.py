@@ -1,6 +1,6 @@
 from sqlalchemy import func
 from dateutil import parser
-from datetime import datetime
+from datetime import datetime, timedelta   # add timedelta
 from com.dimcon.vrse_app.resources.vrse.vrse_audit_log import AuditLog
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
@@ -100,7 +100,10 @@ class AuditLogService:
                     start_date = None
             if end_date:
                 try:
+                    # parse string → midnight of that day
                     end_date = parser.parse(end_date)
+                    # bump to next day so "< end_date" includes full 06-11-2025
+                    end_date = end_date + timedelta(days=1)
                 except Exception as e:
                     logger.error("Failed to parse end_date '%s': %s", end_date, e)
                     end_date = None
@@ -138,7 +141,8 @@ class AuditLogService:
                 if start_date:
                     base_query = base_query.filter(AuditLog.accessed_at >= start_date)
                 if end_date:
-                    base_query = base_query.filter(AuditLog.accessed_at <= end_date)
+                    # now we use < end_date (which is start of day+1)
+                    base_query = base_query.filter(AuditLog.accessed_at < end_date)
 
                 base_query = base_query.order_by(AuditLog.accessed_at.desc())
                 total_count = base_query.count()
@@ -147,10 +151,16 @@ class AuditLogService:
                 results = [log.to_dict() for log in logs]
 
                 logger.info(
-                    "Retrieved %s audit log record(s) out of %s", 
-                    len(results), total_count
+                    "Retrieved %s audit log record(s) out of %s (page=%s, limit=%s)", 
+                    len(results), total_count, page, limit
                 )
-                return {"total_count": total_count, "results": results}
+                # include paging info alongside total_count and results
+                return {
+                    "page":        page,
+                    "limit":       limit,
+                    "total_count": total_count,
+                    "results":     results
+                }
 
         except Exception as e:
             logger.error("Failed to retrieve audit logs: %s", e, exc_info=True)
