@@ -67,7 +67,7 @@ class ClubMemberActivity(Base):
             raise
 
     @classmethod
-    def bulk_insert_active_members(cls, session, members: list[dict]):
+    def bulk_insert_members_activity(cls, session, members: list[dict]):
         """
         Bulk upserts active members from ClubReady and includes the segment value.
         If a record with the same (user_id, segment) exists, it will be updated.

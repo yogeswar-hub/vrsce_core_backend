@@ -42,11 +42,11 @@ class PlatformConfigService:
                 # session.commit() happens automatically at exit
 
             # Now trigger sync using the dictionary data, not the detached instance.
-            ClubReadySyncService().run_sync({
-                "created_by": new_cfg_data.get("created_by"),
-                "updated_by": new_cfg_data.get("updated_by"),
-                "platform_config_id": new_cfg_data.get("id")  # if needed by the sync service
-            })
+            # ClubReadySyncService().run_sync({
+            #     "created_by": new_cfg_data.get("created_by"),
+            #     "updated_by": new_cfg_data.get("updated_by"),
+            #     "platform_config_id": new_cfg_data.get("id")  # if needed by the sync service
+            # })
             
             # Return the inserted record details.
             return {"message": "Platform configuration inserted successfully.", "config": new_cfg_data}

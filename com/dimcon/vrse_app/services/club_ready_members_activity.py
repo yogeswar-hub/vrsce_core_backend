@@ -16,8 +16,8 @@ class ClubReadyActivityUsersService:
                 logger.info(f"📦 Fetching segment: {segment}")
                 users = api_client.fetch_users_activity(activity_date, activity_operator,segment)
                 logger.info(f"→ {len(users)} users fetched from segment '{segment}'")
-                for u in users:
-                    u["Segment"] = segment
+                for user in users:
+                    user ["Segment"] = segment
                 all_users.extend(users)
             except Exception as e:
                 logger.warning(f"⚠️ Failed fetching segment {segment}: {e}")

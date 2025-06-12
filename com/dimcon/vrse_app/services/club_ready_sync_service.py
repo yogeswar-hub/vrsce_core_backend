@@ -51,9 +51,9 @@ class ClubReadySyncService:
                 locations = api_client.fetch_club_locations()
                 ClubLocation.insert_or_update_locations(session, locations, audit)
                 logger.info("Synced %d club locations", len(locations))
-                AuditLogService.log_access(system_user, "club_ready_sync", "POST")
+                AuditLogService.log_access(system_user, "club_ready_sync", "SYNC_LOCATIONS")
             except Exception as e:
-                AuditLogService.log_access(system_user, "club_ready_sync", "POST", error_message=str(e))
+                AuditLogService.log_access(system_user, "club_ready_sync", "SYNC_LOCATIONS", error_message=str(e))
                 logger.exception("Failed to sync locations")
                 return
 
@@ -66,37 +66,42 @@ class ClubReadySyncService:
                     api_client=api_client
                 )
                 logger.info("Fetched %d segmented users", len(segmented_users))
+                AuditLogService.log_access(system_user, "club_ready_sync", "FETCH_SEGMENT_USERS")
             except Exception as e:
+                AuditLogService.log_access(system_user, "club_ready_sync", "SYNC_LOCATIONS", error_message=str(e))
                 logger.exception("Failed to fetch segmented users")
                 return
 
-            # 5) Sync all users (dedupe & bulk upsert) via new service class
+            # 5) Insert segmented users into club_members_activity
             try:
-                logger.info("Step 5: Syncing ALL users (dedupe & upsert)…")
-                ClubReadyAllUserSyncService.sync_all_users(audit, api_client, session)
-                AuditLogService.log_access(system_user, "club_ready_sync", "POST")
+                logger.info("Step 5: Inserting %d segmented users…", len(segmented_users))
+                ClubMemberActivity.bulk_insert_members_activity(session, segmented_users)
+                logger.info("Inserted segmented users")
+                AuditLogService.log_access(system_user, "club_ready_sync", "INSERT_SEGMENT_USERS")
             except Exception as e:
-                AuditLogService.log_access(system_user, "club_ready_sync", "POST", error_message=str(e))
+                AuditLogService.log_access(system_user, "club_ready_sync", "INSERT_SEGMENT_USERS", error_message=str(e))
+                logger.exception("Failed to insert segmented users")
+
+            # 6) Sync all users (dedupe & bulk upsert) via new service class
+            try:
+                logger.info("Step 6: Syncing ALL users…")
+                svc = ClubReadyAllUserSyncService()              # no args here
+                svc.sync_all_users(audit, api_client, session)   # pass args to this method
+                AuditLogService.log_access(system_user, "club_ready_sync", "SYNC_ALL_USERS")
+            except Exception as e:
+                AuditLogService.log_access(system_user, "club_ready_sync", "SYNC_ALL_USERS", error_message=str(e))
                 logger.exception("sync_all_users failed")
                 return
 
-            # 6) Insert segmented users into club_active_members
-            try:
-                logger.info("Step 6: Inserting %d segmented users…", len(segmented_users))
-                ClubMemberActivity.bulk_insert_active_members(session, segmented_users)
-                logger.info("Inserted segmented users")
-                AuditLogService.log_access(system_user, "club_ready_sync", "POST")
-            except Exception as e:
-                AuditLogService.log_access(system_user, "club_ready_sync", "POST", error_message=str(e))
-                logger.exception("Failed to insert segmented users")
 
         # 7) Update latest activity info in club_users
         try:
             logger.info("Step 7: Updating latest activity info…")
-            ClubUsersService(get_engine()).update_latest_activity_info(session)
+            ClubUsersService(engine).update_latest_activity_info(session)
+
             logger.info("Latest activity info updated")
-            AuditLogService.log_access(system_user, "club_ready_sync", "POST")
+            AuditLogService.log_access(system_user, "club_ready_sync", "UPDATE_LATEST_ACTIVITY")
         except Exception as e:
-            AuditLogService.log_access(system_user, "club_ready_sync", "POST", error_message=str(e))
+            AuditLogService.log_access(system_user, "club_ready_sync", "UPDATE_LATEST_ACTIVITY", error_message=str(e))
             logger.exception("Failed to update latest activity info")
             raise

@@ -44,9 +44,13 @@ class AuditLogService:
                 }
             elif resource == "club_ready_sync":
                 action_map = {
-                    "SCHEDULE": "System scheduled ClubReady sync via EventBridge.",
-                    "POST":     "System ran ClubReady sync.",
-                    "GET":      "System retrieved ClubReady sync status."
+                    "SCHEDULE":              "System scheduled ClubReady sync via EventBridge.",
+                    "SYNC_LOCATIONS":        "System synced club locations.",
+                    "FETCH_SEGMENT_USERS":   "System fetched segmented users.",
+                    "INSERT_SEGMENT_USERS":  "System inserted segmented users.",
+                    "SYNC_ALL_USERS":        "System ran full user sync (dedupe & upsert).",
+                    "UPDATE_LATEST_ACTIVITY":"System updated latest activity info.",
+                    "POST":                  "System ran ClubReady sync."  # keep as fallback if needed
                 }
             else:
                 action_map = {

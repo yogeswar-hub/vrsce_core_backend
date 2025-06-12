@@ -50,6 +50,7 @@ class ClubUsersService(BaseDAO):
                     ClubUser.first_name,
                     ClubUser.last_name,
                     ClubUser.email,
+                    ClubUser.phone_number,
                     func.coalesce(ClubUser.latest_segment, 'no status assigned').label("latest_segment")
                 ).filter(
                     ClubUser.primary_store_id == location_id
@@ -72,6 +73,7 @@ class ClubUsersService(BaseDAO):
                             func.lower(ClubUser.last_name).like(term),
                             func.lower(ClubUser.username).like(term),
                             func.lower(ClubUser.email).like(term),
+                            func.lower(ClubUser.phone_number).like(term)
                         )
                     )
                 
@@ -99,25 +101,27 @@ class ClubUsersService(BaseDAO):
                     "location": {
                         "id": loc.club_id,
                         "name": loc.name,
-                        "active_users_count":          counts.active_users_count,
-                        "inactive_users_count":        counts.inactive_users_count,
-                        "no_status_assigned_count":    counts.no_status_assigned_count,
-                        "prospects_count":             counts.prospects_count,
-                        "past_due_count":              counts.past_due_count
+                        "active_users_count":       counts.active_users_count,
+                        "inactive_users_count":     counts.inactive_users_count,
+                        "no_status_assigned_count": counts.no_status_assigned_count,
+                        "prospects_count":          counts.prospects_count,
+                        "past_due_count":           counts.past_due_count
                     },
                     "results": [
                         {
-                            "user_id": u.user_id,
-                            "username": u.username,
-                            "first_name": u.first_name,
-                            "last_name": u.last_name,
-                            "email": u.email,
-                            "latest_segment": u.latest_segment
-                        } for u in users
+                            "user_id":        user.user_id,
+                            "username":       user.username,
+                            "first_name":     user.first_name,
+                            "last_name":      user.last_name,
+                            "email":          user.email,
+                            "latest_segment": user.latest_segment,
+                            "phone_number":   user.phone_number
+                        }
+                        for user in users
                     ],
                     "total_count": total_users,
-                    "page": page,
-                    "limit": limit
+                    "page":        page,
+                    "limit":       limit
                 }
         except Exception as e:
             logger.error("Error in fetch_users_by_location for location_id: %s", location_id, exc_info=True)

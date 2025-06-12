@@ -46,6 +46,7 @@ class ClubUser(Base):
     # Latest activity tracking
     latest_segment     = Column(String(50), nullable=True)
     latest_activity_date = Column(TIMESTAMP(timezone=True), nullable=True)
+    phone_number       = Column(String(50), nullable=True)
 
     def to_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -100,6 +101,7 @@ class ClubUser(Base):
                 "auth_time":         raw_ts,
                 "aud":               user.get("aud"),
                 "auth_time_human":   auth_time_human,
+                "phone_number":      user.get("Phone"),
             })
 
         if not values:
@@ -126,6 +128,7 @@ class ClubUser(Base):
                 "auth_time":           stmt.excluded.auth_time,
                 "aud":                 stmt.excluded.aud,
                 "auth_time_human":     stmt.excluded.auth_time_human,
+                "phone_number":        stmt.excluded.phone_number,
                 
             }
         )
@@ -178,6 +181,7 @@ class ClubUser(Base):
                 "auth_time":        raw_ts,
                 "aud":              user.get("aud"),
                 "auth_time_human":  auth_time_human,
+                "phone_number":     user.get("Phone"),
             })
 
         if not values:
@@ -191,7 +195,7 @@ class ClubUser(Base):
         logger.info(f"Inserted {len(values)} new users (skipped existing by user_id)")
 
     @classmethod
-    def insert_single_user(cls, session, u: dict, audit: dict = None):
+    def insert_single_user(cls, session, user_data: dict, audit: dict = None):
         """
         Insert one user if user_id does not already exist.
         """
@@ -199,32 +203,35 @@ class ClubUser(Base):
             audit = {"created_by":"system","updated_by":"system"}
 
         auth_time_human = None
-        raw_ts = u.get("auth_time")
+        raw_ts = user_data.get("auth_time")
         if raw_ts:
             try:
-                auth_time_human = datetime.fromtimestamp(int(raw_ts), tz=timezone.utc).isoformat()
+                auth_time_human = datetime.fromtimestamp(
+                    int(raw_ts), tz=timezone.utc
+                ).isoformat()
             except Exception:
-                logger.warning(f"Invalid auth_time for user {u.get('UserId')}")
+                logger.warning(f"Invalid auth_time for user {user_data.get('UserId')}")
 
         values = {
-            "user_id":         u.get("UserId"),
-            "email":           u.get("Email"),
-            "first_name":      u.get("FirstName"),
-            "last_name":       u.get("LastName"),
-            "barcode":         u.get("Barcode"),
-            "username":        u.get("Username"),
-            "referral_type_id":u.get("ReferralTypeId"),
-            "primary_store_id":u.get("PrimaryStoreId"),
+            "user_id":         user_data.get("UserId"),
+            "email":           user_data.get("Email"),
+            "first_name":      user_data.get("FirstName"),
+            "last_name":       user_data.get("LastName"),
+            "barcode":         user_data.get("Barcode"),
+            "username":        user_data.get("Username"),
+            "referral_type_id":user_data.get("ReferralTypeId"),
+            "primary_store_id":user_data.get("PrimaryStoreId"),
             "created_at":      datetime.now(timezone.utc),
             "updated_at":      datetime.now(timezone.utc),
             "synced_at":       datetime.now(timezone.utc),
             "created_by":      audit["created_by"],
             "updated_by":      audit["updated_by"],
-            "sub":             u.get("sub"),
-            "iss":             u.get("iss"),
+            "sub":             user_data.get("sub"),
+            "iss":             user_data.get("iss"),
             "auth_time":       raw_ts,
-            "aud":             u.get("aud"),
+            "aud":             user_data.get("aud"),
             "auth_time_human": auth_time_human,
+            "phone_number":    user_data.get("Phone"),
         }
         stmt = pg_insert(cls).values(values)
         stmt = stmt.on_conflict_do_nothing(index_elements=["user_id"])

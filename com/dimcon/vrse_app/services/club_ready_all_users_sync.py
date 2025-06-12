@@ -81,7 +81,7 @@ class ClubReadyAllUserSyncService:
         try:
             logger.info("Upserting %d users into club_users", len(to_upsert))
             logger.debug("Upsert payload sample: %s", json.dumps(to_upsert[:2]))
-            ClubUser(get_engine()).bulk_upsert_users(session, to_upsert, audit)
+            ClubUser.bulk_upsert_users(session, to_upsert, audit)
             logger.info("Bulk upsert completed successfully")
         except Exception:
             logger.exception("Bulk upsert failed")
