@@ -1,6 +1,6 @@
 from datetime import datetime
-from sqlalchemy import select, case, and_, func, literal_column, or_, literal, desc
-from sqlalchemy.sql import over
+from sqlalchemy import select, case, and_, func, desc, over
+from sqlalchemy.sql import literal_column, or_, literal
 from com.dimcon.vrse_app.resources.vrse.vrse_club_locations import ClubLocation
 from com.dimcon.vrse_app.resources.vrse.vrse_club_user_data import ClubReadyUser
 from com.dimcon.vrse_app.utilities.sessions_manager import DBSessionUtil
@@ -39,7 +39,7 @@ class ClubUsersService:
         """
         now = datetime.utcnow()
 
-        # 1) Define segment ranking expression
+        # 1) segmentation expression
         seg_rank = case(
             (and_(
                 ClubReadyUser.member.is_(True),
@@ -59,7 +59,7 @@ class ClubUsersService:
         ).label("seg_rank")
 
         with self.db_util.session_scope() as session:
-            # 2) Subquery: rank rows per user to pick the highest-priority segment
+            # 2) CTE: compute seg_rank + row_number per user
             user_rows = (
                 select(
                     ClubReadyUser.store_id,
@@ -69,8 +69,10 @@ class ClubUsersService:
                     ClubReadyUser.first_name,
                     ClubReadyUser.last_name,
                     ClubReadyUser.member,
+                    ClubReadyUser.prospect,
                     ClubReadyUser.membership_expires_date,
                     ClubReadyUser.membership_ended_date,
+                    ClubReadyUser.cell_phone,
                     seg_rank,
                     over(
                         func.row_number(),
@@ -81,26 +83,24 @@ class ClubUsersService:
                 .where(ClubReadyUser.store_id == location_id)
             ).subquery()
 
-            # 3) CTE: keep only the row with rn == 1 for each user
+            # 3) first_seg: pick only the top‐ranked row per user
             first_seg = (
-                session.query(
-                    ClubReadyUser.user_id,
-                    ClubReadyUser.username,
-                    ClubReadyUser.first_name,
-                    ClubReadyUser.last_name,
-                    ClubReadyUser.email,
-                    ClubReadyUser.member,
-                    ClubReadyUser.membership_expires_date,
-                    ClubReadyUser.membership_ended_date,
-                    ClubReadyUser.cell_phone,
-                    func.row_number().over(
-                        partition_by=ClubReadyUser.user_id,
-                        order_by=desc(ClubReadyUser.membership_expires_date)
-                    ).label("seg_rank")
+                select(
+                    user_rows.c.store_id,
+                    user_rows.c.user_id,
+                    user_rows.c.username,
+                    user_rows.c.email,
+                    user_rows.c.first_name,
+                    user_rows.c.last_name,
+                    user_rows.c.member,
+                    user_rows.c.prospect,
+                    user_rows.c.membership_expires_date,
+                    user_rows.c.membership_ended_date,
+                    user_rows.c.cell_phone,
+                    user_rows.c.seg_rank
                 )
-                .filter(ClubReadyUser.store_id == location_id)
-                .subquery()
-            )
+                .where(user_rows.c.rn == 1)
+            ).subquery()
 
             # 4) Summary counts for each segment
             summary = session.query(
@@ -128,13 +128,13 @@ class ClubUsersService:
                 first_seg.c.email,
                 first_seg.c.member,
                 first_seg.c.membership_expires_date,
-                first_seg.c.cell_phone,
                 case(
-                    (first_seg.c.seg_rank == 1, "Silver"),
-                    (first_seg.c.seg_rank == 2, "Gold"),
-                    (first_seg.c.seg_rank == 3, "Platinum"),
-                    else_="Unknown"
-                ).label("segment")
+                    (first_seg.c.seg_rank == 1, "active"),
+                    (first_seg.c.seg_rank == 2, "inactive"),
+                    (first_seg.c.seg_rank == 3, "prospect"),
+                    else_="unknown"
+                ).label("segment"),
+                first_seg.c.cell_phone
             )
 
             # 6) Filter by requested segment

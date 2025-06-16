@@ -19,12 +19,12 @@ event_first = {
     "time": datetime.now(timezone.utc).isoformat(),
     "region": "us-east-1",
     "resources": [],
-    "detail": {
-        "sync_half": "first",   # Indicates processing the first half.
-        "start_page": "1",
-        "end_page": "600"
-    }
-}
+#     "detail": {
+#         "sync_half": "first",   # Indicates processing the first half.
+#         "start_page": "1160",
+#         "end_page": "1161"
+#     }
+ }
 
 #Example event for processing the second half (pages 51 to 100)
 #     event_second = {
