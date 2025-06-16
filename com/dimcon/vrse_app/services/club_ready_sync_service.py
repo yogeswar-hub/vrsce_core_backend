@@ -1,9 +1,8 @@
 from datetime import datetime
 from sqlalchemy import func
 from com.dimcon.vrse_app.services.club_ready_api_client import ClubReadyAPIClient
-from com.dimcon.vrse_app.services.club_ready_members_activity import ClubReadyActivityUsersService
 from com.dimcon.vrse_app.services.club_users_service import ClubUsersService
-from com.dimcon.vrse_app.services.club_ready_all_users_sync import ClubReadyAllUserSyncService  # new import
+from com.dimcon.vrse_app.services.club_ready_all_users_sync import ClubReadyAllUserSyncService  
 from com.dimcon.vrse_app.services.audit_log_service import AuditLogService
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 from com.dimcon.vrse_app.resources.vrse.vrse_platform_config import PlatformConfig
@@ -57,31 +56,7 @@ class ClubReadySyncService:
                 logger.exception("Failed to sync locations")
                 return
 
-            # 4) Fetch segmented users
-            try:
-                logger.info("Step 4: Fetching segmented users for %s", activity_date)
-                segmented_users = ClubReadyActivityUsersService.sync_all_user_segments(
-                    activity_date=activity_date,
-                    activity_operator="GT",
-                    api_client=api_client
-                )
-                logger.info("Fetched %d segmented users", len(segmented_users))
-                AuditLogService.log_access(system_user, "club_ready_sync", "FETCH_SEGMENT_USERS")
-            except Exception as e:
-                AuditLogService.log_access(system_user, "club_ready_sync", "SYNC_LOCATIONS", error_message=str(e))
-                logger.exception("Failed to fetch segmented users")
-                return
-
-            # 5) Insert segmented users into club_members_activity
-            try:
-                logger.info("Step 5: Inserting %d segmented users…", len(segmented_users))
-                ClubMemberActivity.bulk_insert_members_activity(session, segmented_users)
-                logger.info("Inserted segmented users")
-                AuditLogService.log_access(system_user, "club_ready_sync", "INSERT_SEGMENT_USERS")
-            except Exception as e:
-                AuditLogService.log_access(system_user, "club_ready_sync", "INSERT_SEGMENT_USERS", error_message=str(e))
-                logger.exception("Failed to insert segmented users")
-
+            
             # 6) Sync all users (dedupe & bulk upsert) via new service class
             try:
                 logger.info("Step 6: Syncing ALL users…")
@@ -94,14 +69,4 @@ class ClubReadySyncService:
                 return
 
 
-        # 7) Update latest activity info in club_users
-        try:
-            logger.info("Step 7: Updating latest activity info…")
-            ClubUsersService(engine).update_latest_activity_info(session)
-
-            logger.info("Latest activity info updated")
-            AuditLogService.log_access(system_user, "club_ready_sync", "UPDATE_LATEST_ACTIVITY")
-        except Exception as e:
-            AuditLogService.log_access(system_user, "club_ready_sync", "UPDATE_LATEST_ACTIVITY", error_message=str(e))
-            logger.exception("Failed to update latest activity info")
-            raise
+        

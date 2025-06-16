@@ -5,6 +5,7 @@ Handles GET /club_locations
 import logging
 from sqlalchemy import func
 from com.dimcon.vrse_app.services.club_location_service import ClubLocationService
+from com.dimcon.vrse_app.services.audit_log_service import AuditLogService
 from com.dimcon.vrse_app.utilities.responses import ResponseBuilder
 
 class ClubLocationsRoute:
@@ -30,9 +31,22 @@ class ClubLocationsRoute:
                     page=page, limit=limit, search=search
                 )
                 cls.logger.info("Fetched %d locations", len(data.get("locations", [])))
+                # audit success
+                AuditLogService.log_access(
+                    user_info,
+                    resource="club_locations",
+                    http_method=method
+                )
                 return ResponseBuilder.build_response(200, data)
             except Exception:
                 cls.logger.exception("Error fetching club_locations")
+                # audit failure
+                AuditLogService.log_access(
+                    user_info,
+                    resource="club_locations",
+                    http_method=method,
+                    error_message="Failed to fetch locations"
+                )
                 return ResponseBuilder.build_response(500, {"error": "Failed to fetch locations"})
 
         cls.logger.error("Method %s not allowed on /club_locations", method)

@@ -1,7 +1,7 @@
+from typing import List, Optional
 import os
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List
 from com.dimcon.vrse_app.utilities.log_handler import LoggerManager
 
 logger = LoggerManager.setup_logger(__name__)
@@ -17,13 +17,22 @@ class ClubReadyAPIClient:
     BASE_URL is injected via environment; no hard-codes.
     """
 
-    def __init__(self, api_key: str, chain_id: int):
+    def __init__(self, api_key: str, chain_id: Optional[int] = None):
+        """
+        :param api_key:      your ClubReady API key
+        :param chain_id:     (optional) ClubReady chain identifier
+        """
         self.api_key  = api_key
         self.chain_id = chain_id
-        self.params   = {"ApiKey": api_key, "ChainId": chain_id}
+        # always include ApiKey; only add ChainId if provided
+        self.params = {"ApiKey": api_key}
+        if chain_id is not None:
+            self.params["ChainId"] = chain_id
 
     def fetch_club_locations(self) -> List[dict]:
         # 2) Use the injected BASE_URL
+        if self.chain_id is None:
+            raise ValueError("chain_id is required to fetch club locations")
         url = f"{BASE_URL}/corp/{self.chain_id}/clubs"
         try:
             response = requests.get(url, params=self.params, timeout=30)
@@ -136,6 +145,28 @@ class ClubReadyAPIClient:
         except Exception as e:
             logger.error(f"Failed to find user by name {first_name} {last_name}: {e}")
             return None
+
+    def fetch_all_users_for_store(self, store_id: int) -> list[dict]:
+        """
+        GET https://.../club/{StoreId}/Users/all
+        Returns the full list of users for a single club.
+        """
+        url = f"{BASE_URL}/club/{store_id}/Users/all"
+        try:
+            resp = requests.get(url, params=self.params, timeout=60)
+            resp.raise_for_status()
+            payload = resp.json()
+            # some endpoints wrap in {"users": [...]}, some return list directly
+            if isinstance(payload, dict) and "users" in payload:
+                return payload["users"]
+            elif isinstance(payload, list):
+                return payload
+            else:
+                logger.warning("Unexpected payload in fetch_all_users_for_store: %r", payload)
+                return []
+        except requests.RequestException as e:
+            logger.error("Error fetching all users for store %s: %s", store_id, e)
+            raise
 
 
 def fetch_users_range(api_client, start_page, end_page, limit=100, batch_size=10):

@@ -4,6 +4,7 @@ Handles GET /club_users
 """
 import logging
 from com.dimcon.vrse_app.services.club_users_service import ClubUsersService
+from com.dimcon.vrse_app.services.audit_log_service import AuditLogService
 from com.dimcon.vrse_app.utilities.responses import ResponseBuilder
 from com.dimcon.vrse_app.resources.connect_aurora import get_engine
 
@@ -25,16 +26,35 @@ class ClubUsersRoute:
             if not loc:
                 cls.logger.warning("Missing locationId for /club_users")
                 return ResponseBuilder.build_response(400, {"error": "Missing 'locationId'"})
-            page  = int(query_params.get("page", 1))
-            limit = int(query_params.get("limit", 20))
-            search = query_params.get("search")
+            page    = int(query_params.get("page", 1))
+            limit   = int(query_params.get("limit", 20))
+            search  = query_params.get("search")
+            segment = query_params.get("segment")  # e.g. "active","inactive","prospect"
             svc = ClubUsersService(get_engine())
             try:
-                payload = svc.fetch_users_by_location(int(loc), search, page, limit)
+                payload = svc.fetch_users_by_location(
+                    int(loc),
+                    search,
+                    page,
+                    limit,
+                    segment
+                )
+                AuditLogService.log_access(
+                    user_info,
+                    resource="club_users",
+                    http_method="GET",
+                    location_id=int(loc)
+                )
                 return ResponseBuilder.build_response(200, payload)
-            except Exception:
-                cls.logger.exception("Error fetching club_users")
-                return ResponseBuilder.build_response(500, {"error": "Failed to fetch users"})
+            except Exception as e:
+                AuditLogService.log_access(
+                    user_info,
+                    resource="club_users",
+                    http_method="GET",
+                    location_id=int(loc),
+                    error_message=str(e)
+                )
+                return ResponseBuilder.build_response(500, {"error":"Failed to fetch users"})
 
         cls.logger.error("Method %s not allowed on /club_users", method)
         return ResponseBuilder.build_response(405, {"error": "Method Not Allowed"})

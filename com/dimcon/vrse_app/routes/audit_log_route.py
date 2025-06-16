@@ -33,12 +33,32 @@ class AuditLogRoute:
                     end_date=end_date
                 )
                 cls.logger.info("Retrieved %d audit log entries", len(payload.get("items", [])))
+                # audit successful retrieval of audit logs
+                AuditLogService.log_access(
+                    user_info,
+                    resource="audit_log",
+                    http_method="GET"
+                )
                 return ResponseBuilder.build_response(200, payload)
             except ValueError as ve:
                 cls.logger.warning("Bad parameters: %s", ve)
+                # audit bad request params
+                AuditLogService.log_access(
+                    user_info,
+                    resource="audit_log",
+                    http_method="GET",
+                    error_message=str(ve)
+                )
                 return ResponseBuilder.build_response(400, {"error": str(ve)})
             except Exception:
                 cls.logger.exception("Error in get_audit_logs")
+                # audit unexpected failure
+                AuditLogService.log_access(
+                    user_info,
+                    resource="audit_log",
+                    http_method="GET",
+                    error_message="Failed to retrieve audit logs"
+                )
                 return ResponseBuilder.build_response(500, {"error": "Failed to retrieve audit logs"})
 
         cls.logger.error("Method %s not allowed on /audit_log", method)

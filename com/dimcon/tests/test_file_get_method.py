@@ -43,7 +43,7 @@ def test_get_club_users():
             "locationid": 2345,
             "page": "1",
             "limit": "20",
-            "search": "john"
+            "search": ""
         },
         "pathParameters": {},
         "requestContext": {

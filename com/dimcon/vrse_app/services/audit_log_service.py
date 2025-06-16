@@ -44,13 +44,42 @@ class AuditLogService:
                 }
             elif resource == "club_ready_sync":
                 action_map = {
-                    "SCHEDULE":              "System scheduled ClubReady sync via EventBridge.",
-                    "SYNC_LOCATIONS":        "System synced club locations.",
-                    "FETCH_SEGMENT_USERS":   "System fetched segmented users.",
-                    "INSERT_SEGMENT_USERS":  "System inserted segmented users.",
-                    "SYNC_ALL_USERS":        "System ran full user sync (dedupe & upsert).",
-                    "UPDATE_LATEST_ACTIVITY":"System updated latest activity info.",
-                    "POST":                  "System ran ClubReady sync."  # keep as fallback if needed
+                    "SCHEDULE":               "System scheduled a ClubReady sync via EventBridge.",
+                    "SYNC_LOCATIONS":         "System synchronized club locations.",
+                    "FETCH_SEGMENT_USERS":    "System fetched segmented users.",
+                    "INSERT_SEGMENT_USERS":   "System inserted segmented users.",
+                    "SYNC_ALL_USERS":         "System executed full user sync (dedupe & upsert).",
+                    "UPDATE_LATEST_ACTIVITY": "System updated the latest activity information.",
+                    "POST":                   "System executed ClubReady sync."
+                }
+            # ──────────────── Passkit endpoints ──────────────────
+            elif resource == "member-create-and-distribute":
+                action_map = {
+                    "POST": "System received request to create or update the membership pass and distribute it."
+                }
+            elif resource == "status-snapshot":
+                action_map = {
+                    "GET": "System retrieved the current status counts for the program."
+                }
+            elif resource == "create-status-snapshot":
+                action_map = {
+                    "POST": "System initiated generation of a fresh status‐snapshot report."
+                }
+            elif resource == "create-graph-snapshot":
+                action_map = {
+                    "POST": "System initiated generation of a new graph‐snapshot."
+                }
+            elif resource == "graph-snapshot":
+                action_map = {
+                    "GET": "System retrieved the requested graph‐snapshot data."
+                }
+            elif resource == "member-counts-by-homeclub":
+                action_map = {
+                    "GET": "System fetched member counts grouped by home club."
+                }
+            elif resource == "create-member-counts-by-homeclub":
+                action_map = {
+                    "POST": "System initiated calculation and storage of member-counts by home club."
                 }
             else:
                 action_map = {
